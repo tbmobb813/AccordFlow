@@ -473,26 +473,28 @@ async function sendProposal(
 -- so we use a trigger instead
 CREATE OR REPLACE FUNCTION check_proposal_accepted()
 RETURNS TRIGGER AS $$
+DECLARE
+  v_proposal_status TEXT;
 BEGIN
   -- Allow NULL proposal_id if the column is nullable
   IF NEW.proposal_id IS NULL THEN
     RETURN NEW;
   END IF;
   
-  -- Check if proposal exists
-  IF NOT EXISTS (SELECT 1 FROM proposals WHERE id = NEW.proposal_id) THEN
+  -- Check if proposal exists and get its status
+  SELECT status INTO v_proposal_status
+  FROM proposals 
+  WHERE id = NEW.proposal_id;
+  
+  IF NOT FOUND THEN
     RAISE EXCEPTION 'Proposal with id % does not exist', NEW.proposal_id;
   END IF;
   
   -- Check if proposal is accepted
-  IF NOT EXISTS (
-    SELECT 1 FROM proposals 
-    WHERE id = NEW.proposal_id 
-    AND status = 'accepted'
-  ) THEN
+  IF v_proposal_status != 'accepted' THEN
     RAISE EXCEPTION 'Agreement requires an accepted proposal (proposal % has status ''%'' instead of ''accepted'')', 
       NEW.proposal_id, 
-      (SELECT status FROM proposals WHERE id = NEW.proposal_id);
+      v_proposal_status;
   END IF;
   
   RETURN NEW;
@@ -512,26 +514,28 @@ CREATE TRIGGER enforce_proposal_accepted
 -- so we use a trigger instead
 CREATE OR REPLACE FUNCTION check_agreement_signed()
 RETURNS TRIGGER AS $$
+DECLARE
+  v_signature_status TEXT;
 BEGIN
   -- Allow NULL agreement_id if the column is nullable
   IF NEW.agreement_id IS NULL THEN
     RETURN NEW;
   END IF;
   
-  -- Check if agreement exists
-  IF NOT EXISTS (SELECT 1 FROM agreements WHERE id = NEW.agreement_id) THEN
+  -- Check if agreement exists and get its signature_status
+  SELECT signature_status INTO v_signature_status
+  FROM agreements 
+  WHERE id = NEW.agreement_id;
+  
+  IF NOT FOUND THEN
     RAISE EXCEPTION 'Agreement with id % does not exist', NEW.agreement_id;
   END IF;
   
   -- Check if agreement is signed
-  IF NOT EXISTS (
-    SELECT 1 FROM agreements 
-    WHERE id = NEW.agreement_id 
-    AND signature_status = 'signed'
-  ) THEN
+  IF v_signature_status != 'signed' THEN
     RAISE EXCEPTION 'Invoice requires a signed agreement (agreement % has signature_status ''%'' instead of ''signed'')', 
       NEW.agreement_id, 
-      (SELECT signature_status FROM agreements WHERE id = NEW.agreement_id);
+      v_signature_status;
   END IF;
   
   RETURN NEW;
