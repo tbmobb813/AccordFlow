@@ -1,0 +1,302 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// TENANT & USER MANAGEMENT
+// ============================================
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  users         User[]
+  contacts      Contact[]
+  opportunities Opportunity[]
+  proposals     Proposal[]
+  agreements    Agreement[]
+  invoices      Invoice[]
+  payments      Payment[]
+  activities    Activity[]
+
+  @@index([slug])
+  @@map("tenants")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  tenantId     String
+  clerkUserId  String   @unique
+  email        String
+  firstName    String?
+  lastName     String?
+  role         UserRole @default(USER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  activities Activity[]
+
+  @@index([tenantId])
+  @@index([clerkUserId])
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  USER
+  VIEWER
+}
+
+// ============================================
+// WORKFLOW ENTITIES (State Machine)
+// ============================================
+
+model Contact {
+  id          String        @id @default(cuid())
+  tenantId    String
+  firstName   String
+  lastName    String
+  email       String
+  phone       String?
+  company     String?
+  status      ContactStatus @default(ACTIVE)
+  source      String?
+  notes       String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  // Relations
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  opportunities Opportunity[]
+  activities    Activity[]
+
+  @@index([tenantId])
+  @@index([email])
+  @@map("contacts")
+}
+
+enum ContactStatus {
+  ACTIVE
+  INACTIVE
+  QUALIFIED
+  UNQUALIFIED
+}
+
+model Opportunity {
+  id          String            @id @default(cuid())
+  tenantId    String
+  contactId   String
+  title       String
+  description String?
+  value       Decimal?          @db.Decimal(10, 2)
+  stage       OpportunityStage  @default(PROSPECTING)
+  probability Int               @default(0)
+  expectedCloseDate DateTime?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  // Relations
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contact    Contact    @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  proposals  Proposal[]
+  activities Activity[]
+
+  @@index([tenantId])
+  @@index([contactId])
+  @@map("opportunities")
+}
+
+enum OpportunityStage {
+  PROSPECTING
+  QUALIFICATION
+  PROPOSAL
+  NEGOTIATION
+  CLOSED_WON
+  CLOSED_LOST
+}
+
+model Proposal {
+  id            String         @id @default(cuid())
+  tenantId      String
+  opportunityId String
+  title         String
+  content       String?
+  totalAmount   Decimal        @db.Decimal(10, 2)
+  status        ProposalStatus @default(DRAFT)
+  validUntil    DateTime?
+  sentAt        DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  // Relations
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  agreements  Agreement[]
+  activities  Activity[]
+
+  @@index([tenantId])
+  @@index([opportunityId])
+  @@map("proposals")
+}
+
+enum ProposalStatus {
+  DRAFT
+  SENT
+  VIEWED
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+model Agreement {
+  id          String          @id @default(cuid())
+  tenantId    String
+  proposalId  String
+  title       String
+  content     String?
+  status      AgreementStatus @default(DRAFT)
+  signedAt    DateTime?
+  effectiveDate DateTime?
+  expiryDate  DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  // Relations
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  proposal   Proposal   @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  invoices   Invoice[]
+  activities Activity[]
+
+  @@index([tenantId])
+  @@index([proposalId])
+  @@map("agreements")
+}
+
+enum AgreementStatus {
+  DRAFT
+  PENDING_SIGNATURE
+  SIGNED
+  ACTIVE
+  EXPIRED
+  TERMINATED
+}
+
+model Invoice {
+  id          String        @id @default(cuid())
+  tenantId    String
+  agreementId String
+  invoiceNumber String      @unique
+  amount      Decimal       @db.Decimal(10, 2)
+  status      InvoiceStatus @default(DRAFT)
+  dueDate     DateTime
+  issuedAt    DateTime?
+  paidAt      DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  // Relations
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  agreement  Agreement  @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+  payments   Payment[]
+  activities Activity[]
+
+  @@index([tenantId])
+  @@index([agreementId])
+  @@index([invoiceNumber])
+  @@map("invoices")
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  VIEWED
+  PARTIAL_PAYMENT
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+model Payment {
+  id            String        @id @default(cuid())
+  tenantId      String
+  invoiceId     String
+  amount        Decimal       @db.Decimal(10, 2)
+  status        PaymentStatus @default(PENDING)
+  method        String?
+  transactionId String?
+  paidAt        DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // Relations
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invoice    Invoice    @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  activities Activity[]
+
+  @@index([tenantId])
+  @@index([invoiceId])
+  @@map("payments")
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+// ============================================
+// EVENT SOURCING & ACTIVITY TIMELINE
+// ============================================
+
+model Activity {
+  id         String       @id @default(cuid())
+  tenantId   String
+  userId     String?
+  entityType EntityType
+  entityId   String
+  action     String
+  metadata   Json?
+  createdAt  DateTime     @default(now())
+
+  // Relations
+  tenant        Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user          User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  // Polymorphic relations (stored as entityId + entityType)
+  contact       Contact?     @relation(fields: [entityId], references: [id], onDelete: Cascade, map: "activity_contact_fk")
+  opportunity   Opportunity? @relation(fields: [entityId], references: [id], onDelete: Cascade, map: "activity_opportunity_fk")
+  proposal      Proposal?    @relation(fields: [entityId], references: [id], onDelete: Cascade, map: "activity_proposal_fk")
+  agreement     Agreement?   @relation(fields: [entityId], references: [id], onDelete: Cascade, map: "activity_agreement_fk")
+  invoice       Invoice?     @relation(fields: [entityId], references: [id], onDelete: Cascade, map: "activity_invoice_fk")
+  payment       Payment?     @relation(fields: [entityId], references: [id], onDelete: Cascade, map: "activity_payment_fk")
+
+  @@index([tenantId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("activities")
+}
+
+enum EntityType {
+  CONTACT
+  OPPORTUNITY
+  PROPOSAL
+  AGREEMENT
+  INVOICE
+  PAYMENT
+}
