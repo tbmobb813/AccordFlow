@@ -19,8 +19,15 @@ export class OpportunitiesService {
 
       const opportunity = await tx.opportunity.create({
         data: {
-          ...createOpportunityDto,
+          name: createOpportunityDto.name,
+          contactId: createOpportunityDto.contactId,
           tenantId,
+          pipelineId: createOpportunityDto.pipelineId,
+          stageId: createOpportunityDto.stageId,
+          valueEstimate: createOpportunityDto.value,
+          expectedCloseDate: createOpportunityDto.expectedCloseDate
+            ? new Date(createOpportunityDto.expectedCloseDate)
+            : undefined,
         },
       });
 
@@ -31,7 +38,7 @@ export class OpportunitiesService {
           entityType: 'OPPORTUNITY',
           entityId: opportunity.id,
           action: 'CREATED',
-          metadata: { title: opportunity.title, stage: opportunity.stage },
+          metadata: { name: opportunity.name, stageId: opportunity.stageId },
         },
       });
 
@@ -117,7 +124,7 @@ export class OpportunitiesService {
           entityType: 'OPPORTUNITY',
           entityId: opportunity.id,
           action: 'DELETED',
-          metadata: { title: opportunity.title },
+          metadata: { name: opportunity.name },
         },
       });
 
