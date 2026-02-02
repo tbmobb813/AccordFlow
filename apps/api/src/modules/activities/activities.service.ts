@@ -1,15 +1,25 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
+import { ActivityEntityType } from '@prisma/client';
 
 @Injectable()
 export class ActivitiesService {
   constructor(private prisma: PrismaService) {}
 
   async findAll(tenantId: string, entityType?: string, entityId?: string) {
+    let validatedEntityType: ActivityEntityType | undefined;
+    if (entityType) {
+      const values = Object.values(ActivityEntityType) as string[];
+      if (!values.includes(entityType)) {
+        throw new BadRequestException(`Invalid entityType: ${entityType}`);
+      }
+      validatedEntityType = entityType as ActivityEntityType;
+    }
+
     return this.prisma.activity.findMany({
       where: {
         tenantId,
-        ...(entityType && { entityType: entityType as any }),
+        ...(validatedEntityType && { entityType: validatedEntityType }),
         ...(entityId && { entityId }),
       },
       include: {
