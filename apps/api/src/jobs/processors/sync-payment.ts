@@ -1,3 +1,3 @@
-export const syncPayment = async (job: any) => {
+export const syncPayment = async () => {
   // Placeholder
 };

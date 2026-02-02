@@ -1,3 +1,3 @@
-export const sendProposal = async (job: any) => {
+export const sendProposal = async () => {
   // Placeholder
 };

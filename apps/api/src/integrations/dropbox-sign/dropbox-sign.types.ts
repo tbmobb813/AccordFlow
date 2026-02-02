@@ -1,1 +1,4 @@
-export interface DropboxSignEvent { id: string; signature_request: any }
+export interface DropboxSignEvent {
+  id: string;
+  signature_request: any;
+}

@@ -1,3 +1,3 @@
-export const generateInvoice = async (job: any) => {
+export const generateInvoice = async () => {
   // Placeholder
 };

@@ -1,1 +1,3 @@
-export interface S3Config { bucket: string }
+export interface S3Config {
+  bucket: string;
+}
