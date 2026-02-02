@@ -469,29 +469,53 @@ async function sendProposal(
 ### Rule 1: Proposal → Agreement Requirement
 ```sql
 -- Constraint: Agreement requires accepted proposal
-ALTER TABLE agreements
-  ADD CONSTRAINT chk_proposal_accepted
-  CHECK (
-    NOT EXISTS (
-      SELECT 1 FROM proposals 
-      WHERE proposals.id = agreements.proposal_id 
-      AND proposals.status != 'accepted'
-    )
-  );
+-- Note: PostgreSQL does not support subqueries in CHECK constraints,
+-- so we use a trigger instead
+CREATE OR REPLACE FUNCTION check_proposal_accepted()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM proposals 
+    WHERE proposals.id = NEW.proposal_id 
+    AND proposals.status = 'accepted'
+  ) THEN
+    RAISE EXCEPTION 'Agreement requires an accepted proposal';
+  END IF;
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER enforce_proposal_accepted
+  BEFORE INSERT OR UPDATE OF proposal_id ON agreements
+  FOR EACH ROW
+  EXECUTE FUNCTION check_proposal_accepted();
 ```
 
 ### Rule 2: Agreement → Invoice Requirement
 ```sql
 -- Constraint: Invoice requires signed agreement
-ALTER TABLE invoices
-  ADD CONSTRAINT chk_agreement_signed
-  CHECK (
-    NOT EXISTS (
-      SELECT 1 FROM agreements 
-      WHERE agreements.id = invoices.agreement_id 
-      AND agreements.signature_status != 'signed'
-    )
-  );
+-- Note: PostgreSQL does not support subqueries in CHECK constraints,
+-- so we use a trigger instead
+CREATE OR REPLACE FUNCTION check_agreement_signed()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM agreements 
+    WHERE agreements.id = NEW.agreement_id 
+    AND agreements.signature_status = 'signed'
+  ) THEN
+    RAISE EXCEPTION 'Invoice requires a signed agreement';
+  END IF;
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER enforce_agreement_signed
+  BEFORE INSERT OR UPDATE OF agreement_id ON invoices
+  FOR EACH ROW
+  EXECUTE FUNCTION check_agreement_signed();
 ```
 
 ### Rule 3: Invoice Payment Reconciliation
