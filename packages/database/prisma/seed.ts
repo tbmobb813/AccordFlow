@@ -33,33 +33,50 @@ async function main() {
   const contact = await prisma.contact.create({
     data: {
       tenantId: tenant.id,
-      firstName: 'John',
-      lastName: 'Doe',
+      name: 'John Doe',
       email: 'john.doe@example.com',
       phone: '+1-555-0123',
-      company: 'Acme Corp',
-      status: 'QUALIFIED',
-      source: 'Website',
+      companyName: 'Acme Corp',
+      lifecycleStage: 'QUALIFIED',
     },
   });
 
   console.log('✅ Created contact:', contact.email);
 
   // Create demo opportunity
+  // create a pipeline and a stage so opportunity can reference them
+  const pipeline = await prisma.pipeline.create({
+    data: {
+      tenantId: tenant.id,
+      name: 'Default Pipeline',
+      isDefault: true,
+    },
+  });
+
+  const stage = await prisma.stage.create({
+    data: {
+      pipelineId: pipeline.id,
+      name: 'Prospecting',
+      position: 1,
+      probability: 20,
+    },
+  });
+
   const opportunity = await prisma.opportunity.create({
     data: {
       tenantId: tenant.id,
       contactId: contact.id,
-      title: 'Virtual Assistant Services',
-      description: 'Full-time VA for administrative tasks',
-      value: 5000.0,
-      stage: 'PROPOSAL',
-      probability: 75,
+      pipelineId: pipeline.id,
+      stageId: stage.id,
+      name: 'Virtual Assistant Services',
+      valueEstimate: 5000.0,
+      currency: 'USD',
+      status: 'OPEN',
       expectedCloseDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
     },
   });
 
-  console.log('✅ Created opportunity:', opportunity.title);
+  console.log('✅ Created opportunity:', opportunity.name);
 
   // Create activity
   await prisma.activity.create({
@@ -70,8 +87,9 @@ async function main() {
       entityId: opportunity.id,
       action: 'CREATED',
       metadata: {
-        stage: opportunity.stage,
-        value: opportunity.value!.toString(),
+        name: opportunity.name,
+        valueEstimate: opportunity.valueEstimate?.toString(),
+        stageId: opportunity.stageId,
       },
     },
   });

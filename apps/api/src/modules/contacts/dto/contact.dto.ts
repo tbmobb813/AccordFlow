@@ -5,11 +5,7 @@ import { ContactLifecycleStage } from '@prisma/client';
 export class CreateContactDto {
   @ApiProperty()
   @IsString()
-  firstName: string;
-
-  @ApiProperty()
-  @IsString()
-  lastName: string;
+  name: string;
 
   @ApiProperty()
   @IsEmail()
@@ -23,22 +19,14 @@ export class CreateContactDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
-  company?: string;
+  companyName?: string;
 
   @ApiProperty({ required: false, enum: ContactLifecycleStage })
   @IsOptional()
   @IsEnum(ContactLifecycleStage)
   lifecycleStage?: ContactLifecycleStage;
 
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsString()
-  source?: string;
-
-  @ApiProperty({ required: false })
-  @IsOptional()
-  @IsString()
-  notes?: string;
+  // source/notes removed to match DB schema
 }
 
 export class UpdateContactDto extends PartialType(CreateContactDto) {}

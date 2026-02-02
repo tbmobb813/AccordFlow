@@ -10,7 +10,12 @@ export class ContactsService {
     return this.prisma.$transaction(async (tx) => {
       const contact = await tx.contact.create({
         data: {
-          ...createContactDto,
+          name: createContactDto.name,
+          email: createContactDto.email,
+          phone: createContactDto.phone,
+          companyName: createContactDto.companyName,
+          lifecycleStage: createContactDto.lifecycleStage,
+          // notes field removed in schema
           tenantId,
         },
       });
@@ -24,9 +29,9 @@ export class ContactsService {
           entityId: contact.id,
           action: 'CREATED',
           metadata: {
-            firstName: contact.firstName,
-            lastName: contact.lastName,
+            name: contact.name,
             email: contact.email,
+            companyName: contact.companyName,
           },
         },
       });
@@ -103,8 +108,8 @@ export class ContactsService {
           entityId: contact.id,
           action: 'DELETED',
           metadata: {
-            firstName: contact.firstName,
-            lastName: contact.lastName,
+            name: contact.name,
+            companyName: contact.companyName,
           },
         },
       });

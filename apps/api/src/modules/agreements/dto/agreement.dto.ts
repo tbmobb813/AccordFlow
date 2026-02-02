@@ -9,6 +9,10 @@ export class CreateAgreementDto {
 
   @ApiProperty()
   @IsString()
+  opportunityId: string;
+
+  @ApiProperty()
+  @IsString()
   title: string;
 
   @ApiProperty({ required: false })

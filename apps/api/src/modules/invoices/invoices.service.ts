@@ -10,7 +10,13 @@ export class InvoicesService {
     return this.prisma.$transaction(async (tx) => {
       const invoice = await tx.invoice.create({
         data: {
-          ...createInvoiceDto,
+          opportunityId: createInvoiceDto.opportunityId,
+          agreementId: createInvoiceDto.agreementId,
+          number: createInvoiceDto.number,
+          totalAmount: createInvoiceDto.totalAmount,
+          currency: createInvoiceDto.currency ?? 'USD',
+          status: createInvoiceDto.status,
+          dueDate: new Date(createInvoiceDto.dueDate),
           tenantId,
         },
       });
@@ -22,7 +28,7 @@ export class InvoicesService {
           entityType: 'INVOICE',
           entityId: invoice.id,
           action: 'CREATED',
-          metadata: { invoiceNumber: invoice.invoiceNumber, amount: invoice.amount.toString() },
+          metadata: { number: invoice.number, totalAmount: invoice.totalAmount.toString() },
         },
       });
 
@@ -92,7 +98,7 @@ export class InvoicesService {
           entityType: 'INVOICE',
           entityId: invoice.id,
           action: 'DELETED',
-          metadata: { invoiceNumber: invoice.invoiceNumber },
+          metadata: { number: invoice.number, totalAmount: invoice.totalAmount.toString() },
         },
       });
 

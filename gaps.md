@@ -9,27 +9,29 @@ Basic State Enums: OpportunityState, ProposalStatus, AgreementStatus, InvoiceSta
 
 ❌ Missing from Documentation Requirements
 
-1. Critical Missing Entities
-Tenant model - The docs refer to "Tenant" but the schema has no dedicated Tenant table
-User model - No user management (only Clerk user IDs referenced)
-Inquiry model - Complete inquiry workflow (new → in_review → converted/rejected)
-Pipeline model - Sales pipeline configuration
-Stage model - Opportunity stages within pipelines
-Meeting model - Meeting scheduling and tracking
-Idempotency Keys table - For idempotent operations
+# 1. Critical Missing Entities
 
-1. State Machine Discrepancies
-Current vs Documentation:
+- Tenant model - The docs refer to "Tenant" but the schema has no dedicated Tenant table
+- User model - No user management (only Clerk user IDs referenced)
+- Inquiry model - Complete inquiry workflow (new → in_review → converted/rejected)
+- Pipeline model - Sales pipeline configuration
+- Stage model - Opportunity stages within pipelines
+- Meeting model - Meeting scheduling and tracking
+- Idempotency Keys table - For idempotent operations
 
-Contact: No lifecycle tracking (should have: lead → qualified → client → archived)
-Inquiry: Completely missing (should have: new → in_review → converted/rejected)
-Opportunity: Uses OpportunityState enum but doesn't follow docs (should be: open/won/lost with separate stage progression)
-Proposal: Missing ACCEPTED/REJECTED states (has SIGNED instead)
-Agreement: Different states (PENDING vs DRAFT, no CANCELED/DECLINED)
-Invoice: Missing PARTIALLY_PAID state
-Payment: Missing proper state machine validation
+# 2. State Machine Discrepancies
 
-3. Missing Database Features
+ Current vs Documentation:
+
+- Contact: No lifecycle tracking (should have: lead → qualified → client → archived)
+- Inquiry: Completely missing (should have: new → in_review → converted/rejected)
+- Opportunity: Uses OpportunityState enum but doesn't follow docs (should be: open/won/lost with separate stage progression)
+- Proposal: Missing ACCEPTED/REJECTED states (has SIGNED instead)
+- Agreement: Different states (PENDING vs DRAFT, no CANCELED/DECLINED)
+- Invoice: Missing PARTIALLY_PAID state
+- Payment: Missing proper state machine validation
+
+# 3. Missing Database Features
 ❌ Row-level security policies
 ❌ Database triggers for state validation
 ❌ Auto-generated invoice numbers (trigger function)

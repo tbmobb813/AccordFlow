@@ -22,7 +22,7 @@ export class AgreementsService {
           entityType: 'AGREEMENT',
           entityId: agreement.id,
           action: 'CREATED',
-          metadata: { title: agreement.title, status: agreement.status },
+          metadata: { title: agreement.title, signatureStatus: agreement.signatureStatus },
         },
       });
 
@@ -41,7 +41,7 @@ export class AgreementsService {
   async findOne(tenantId: string, id: string) {
     return this.prisma.agreement.findFirst({
       where: { id, tenantId },
-      include: { proposal: true, invoices: true },
+      include: { proposal: true, invoice: true },
     });
   }
 

@@ -41,7 +41,7 @@ export class ProposalsService {
   async findOne(tenantId: string, id: string) {
     return this.prisma.proposal.findFirst({
       where: { id, tenantId },
-      include: { opportunity: true, agreements: true },
+      include: { opportunity: true, agreement: true },
     });
   }
 
