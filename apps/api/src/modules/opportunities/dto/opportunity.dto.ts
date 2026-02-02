@@ -1,7 +1,7 @@
 import { IsString, IsOptional, IsEnum, IsNumber, IsDateString } from 'class-validator';
 import { ApiProperty, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { OpportunityStage } from '@accordflow/database';
+import { OpportunityStage } from '@prisma/client';
 
 export class CreateOpportunityDto {
   @ApiProperty()

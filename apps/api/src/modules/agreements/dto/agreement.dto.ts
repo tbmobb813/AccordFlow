@@ -1,6 +1,6 @@
 import { IsString, IsOptional, IsEnum, IsDateString } from 'class-validator';
 import { ApiProperty, PartialType } from '@nestjs/swagger';
-import { AgreementStatus } from '@accordflow/database';
+import { AgreementStatus } from '@prisma/client';
 
 export class CreateAgreementDto {
   @ApiProperty()

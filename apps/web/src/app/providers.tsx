@@ -1,9 +1,15 @@
 'use client';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
+import dynamic from 'next/dynamic';
 
-export function Providers({ children }: { children: React.ReactNode }) {
+// Dynamically import ClerkProvider to avoid loading Clerk during build when key is absent
+const ClerkProvider = dynamic(() => import('@clerk/nextjs').then((m) => m.ClerkProvider), {
+  ssr: false,
+});
+
+export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -15,5 +21,17 @@ export function Providers({ children }: { children: React.ReactNode }) {
       }),
   );
 
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+
+  const content = <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+
+  if (!clerkPublishableKey) {
+    // Safe fallback: do not initialize Clerk when publishable key is missing (e.g., CI/prerender)
+    return content;
+  }
+
+  return (
+    // Initialize Clerk only when publishable key is available
+    <ClerkProvider publishableKey={clerkPublishableKey}>{content}</ClerkProvider>
+  );
 }

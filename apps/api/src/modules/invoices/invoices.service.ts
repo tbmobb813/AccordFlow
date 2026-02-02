@@ -67,7 +67,7 @@ export class InvoicesService {
           entityType: 'INVOICE',
           entityId: invoice.id,
           action: 'UPDATED',
-          metadata: updateInvoiceDto,
+          metadata: updateInvoiceDto as any,
         },
       });
 

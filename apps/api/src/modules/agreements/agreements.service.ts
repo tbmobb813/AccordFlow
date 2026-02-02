@@ -45,7 +45,12 @@ export class AgreementsService {
     });
   }
 
-  async update(tenantId: string, userId: string, id: string, updateAgreementDto: UpdateAgreementDto) {
+  async update(
+    tenantId: string,
+    userId: string,
+    id: string,
+    updateAgreementDto: UpdateAgreementDto,
+  ) {
     return this.prisma.$transaction(async (tx) => {
       const existing = await tx.agreement.findFirst({
         where: { id, tenantId },
@@ -67,7 +72,7 @@ export class AgreementsService {
           entityType: 'AGREEMENT',
           entityId: agreement.id,
           action: 'UPDATED',
-          metadata: updateAgreementDto,
+          metadata: updateAgreementDto as any,
         },
       });
 

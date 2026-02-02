@@ -92,7 +92,7 @@ export class OpportunitiesService {
           entityType: 'OPPORTUNITY',
           entityId: opportunity.id,
           action: 'UPDATED',
-          metadata: updateOpportunityDto,
+          metadata: updateOpportunityDto as any,
         },
       });
 

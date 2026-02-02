@@ -1,12 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Patch,
-  Param,
-  Delete,
-} from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ContactsService } from './contacts.service';
 import { CreateContactDto, UpdateContactDto } from './dto/contact.dto';
@@ -53,11 +45,7 @@ export class ContactsController {
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a contact' })
-  remove(
-    @TenantId() tenantId: string,
-    @CurrentUser() user: any,
-    @Param('id') id: string,
-  ) {
+  remove(@TenantId() tenantId: string, @CurrentUser() user: any, @Param('id') id: string) {
     return this.contactsService.remove(tenantId, user.id, id);
   }
 }

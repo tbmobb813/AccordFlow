@@ -8,6 +8,13 @@ info:
     and domain service boundaries. All state transitions emit events.
     All mutating operations return canonical object + event pairs.
 
+    Rate Limits:
+    - Standard endpoints: 100 req/min per tenant
+    - Send operations: 10 req/min per tenant
+    - Webhook endpoints: No rate limit (validated by signature)
+
+    Note: All timestamps are in UTC and should be provided/returned in ISO 8601 format.
+
 servers:
   - url: https://api.example.com/v1
 
@@ -128,6 +135,18 @@ components:
         has_more:
           type: boolean
           description: Whether more results exist
+
+    Timestamp:
+      type: string
+      format: date-time
+      description: All timestamps are in UTC and follow ISO 8601 format (e.g. RFC3339).
+      example: "2024-02-02T14:30:00Z"
+
+    Currency:
+      type: string
+      pattern: "^[A-Z]{3}$"
+      description: ISO 4217 currency code (e.g., USD, EUR, GBP)
+      example: "USD"
 
     # Core domain schemas
 
@@ -612,6 +631,11 @@ paths:
           schema:
             type: string
             enum: [lead, qualified, client, archived]
+        - name: fields
+          in: query
+          description: Comma-separated list of fields to include in each Contact (e.g. `id,name,email`). Omitting returns full objects.
+          schema:
+            type: string
       responses:
         '200':
           description: List of contacts
@@ -682,6 +706,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '412':
+          description: Precondition failed (stale data) - ETag/If-Match mismatch
 
   # ============================================================================
   # INQUIRIES
@@ -864,6 +890,52 @@ paths:
           $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/Unprocessable'
+
+  /inquiries/bulk-convert:
+    post:
+      summary: Bulk convert inquiries to opportunities
+      operationId: bulkConvertInquiries
+      tags: [Inquiries]
+      description: Convert multiple inquiries to opportunities in a single request. Each conversion follows the same rules as single convert endpoint.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [inquiry_ids]
+              properties:
+                inquiry_ids:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+      responses:
+        '200':
+          description: Bulk conversion results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        inquiry_id:
+                          type: string
+                          format: uuid
+                        opportunity_id:
+                          type: string
+                          format: uuid
+                          nullable: true
+                        status:
+                          type: string
+                          enum: [success, failed]
+                        error:
+                          type: object
+                          nullable: true
 
   # ============================================================================
   # PIPELINES & STAGES
@@ -1072,7 +1144,14 @@ paths:
               type: object
               required: [title, total_amount]
               properties:
-                title: { type: string }
+                title:
+                  type: string
+                  minLength: 1
+                  maxLength: 500
+                message:
+                  type: string
+                  minLength: 10
+                  maxLength: 5000
                 total_amount: { type: number, format: decimal }
                 currency:
                   type: string
@@ -1191,13 +1270,25 @@ paths:
           in: path
           required: true
           schema: { type: string, format: uuid }
+        - name: If-Match
+          in: header
+          description: ETag value for optimistic concurrency control. If provided, server will reject updates when mismatch.
+          schema:
+            type: string
       requestBody:
         content:
           application/json:
             schema:
               type: object
               properties:
-                title: { type: string }
+                title:
+                  type: string
+                  minLength: 1
+                  maxLength: 500
+                message:
+                  type: string
+                  minLength: 10
+                  maxLength: 5000
                 total_amount: { type: number, format: decimal }
       responses:
         '200':
@@ -1321,7 +1412,14 @@ paths:
             schema:
               type: object
               properties:
-                title: { type: string }
+                title:
+                  type: string
+                  minLength: 1
+                  maxLength: 500
+                message:
+                  type: string
+                  minLength: 10
+                  maxLength: 5000
                 signer_name: { type: string }
                 signer_email: { type: string, format: email }
       responses:
@@ -1578,6 +1676,11 @@ paths:
         endpoint from the global bearerAuth requirement. Implementations must validate the
         Stripe-Signature header using the Stripe webhook secret to verify authenticity.
         See: https://stripe.com/docs/webhooks/signatures
+        
+        Implementation must:
+        - Return 200 within 5 seconds to avoid retries
+        - Use `provider_payment_id` for idempotency
+        - Handle duplicate webhooks gracefully (dedupe by provider_payment_id)
       requestBody:
         required: true
         content:
@@ -1604,6 +1707,47 @@ paths:
                   - properties:
                       object:
                         $ref: '#/components/schemas/Payment'
+
+  /webhooks/subscriptions:
+    post:
+      summary: Create webhook subscription
+      operationId: createWebhookSubscription
+      tags: [Webhooks]
+      description: Create a subscription for event webhooks. Registered endpoints will receive validated event payloads.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url, events]
+              properties:
+                url:
+                  type: string
+                  format: uri
+                events:
+                  type: array
+                  items:
+                    type: string
+                  description: List of event names to subscribe to (e.g. proposal.accepted, invoice.paid)
+      responses:
+        '200':
+          description: Subscription created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  url:
+                    type: string
+                    format: uri
+                  events:
+                    type: array
+                    items:
+                      type: string
 
   # ============================================================================
   # ACTIVITY TIMELINE

@@ -16,9 +16,11 @@
 
 @layer base {
   * {
-    @apply border-border;
+    box-sizing: border-box;
+    border-color: rgba(var(--foreground), 0.1);
   }
   body {
-    @apply bg-background text-foreground;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
   }
 }

@@ -1,7 +1,7 @@
 import { IsString, IsEnum, IsNumber, IsDateString, IsOptional } from 'class-validator';
 import { ApiProperty, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { InvoiceStatus } from '@accordflow/database';
+import { InvoiceStatus } from '@prisma/client';
 
 export class CreateInvoiceDto {
   @ApiProperty()

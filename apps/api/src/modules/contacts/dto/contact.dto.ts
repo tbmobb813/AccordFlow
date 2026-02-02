@@ -1,6 +1,6 @@
 import { IsString, IsEmail, IsOptional, IsEnum } from 'class-validator';
 import { ApiProperty, PartialType } from '@nestjs/swagger';
-import { ContactStatus } from '@accordflow/database';
+import { ContactStatus } from '@prisma/client';
 
 export class CreateContactDto {
   @ApiProperty()

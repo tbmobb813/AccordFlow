@@ -67,7 +67,7 @@ export class PaymentsService {
           entityType: 'PAYMENT',
           entityId: payment.id,
           action: 'UPDATED',
-          metadata: updatePaymentDto,
+          metadata: updatePaymentDto as any,
         },
       });
 

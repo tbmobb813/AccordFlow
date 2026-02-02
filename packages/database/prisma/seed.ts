@@ -71,7 +71,7 @@ async function main() {
       action: 'CREATED',
       metadata: {
         stage: opportunity.stage,
-        value: opportunity.value.toString(),
+        value: opportunity.value!.toString(),
       },
     },
   });
