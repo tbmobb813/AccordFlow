@@ -1,7 +1,7 @@
 'use client';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 
 // Dynamically import ClerkProvider to avoid loading Clerk during build when key is absent
@@ -9,7 +9,7 @@ const ClerkProvider = dynamic(() => import('@clerk/nextjs').then((m) => m.ClerkP
   ssr: false,
 });
 
-export function Providers({ children }: { children: React.ReactNode }) {
+export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -32,7 +32,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     // Initialize Clerk only when publishable key is available
-    // eslint-disable-next-line react/jsx-no-constructed-context-values
     <ClerkProvider publishableKey={clerkPublishableKey}>{content}</ClerkProvider>
   );
 }

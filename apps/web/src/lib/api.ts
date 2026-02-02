@@ -14,6 +14,7 @@ export const api = axios.create({
 // Add request interceptor to include auth token and tenant
 // Note: This should be called from client components with useAuth() from Clerk
 api.interceptors.request.use((config) => {
+  // eslint-disable-next-line no-undef
   const tenantSlug = localStorage.getItem('tenant-slug') || 'demo-company';
   config.headers['x-tenant-slug'] = tenantSlug;
 
@@ -81,6 +82,7 @@ export const paymentsApi = {
 
 export const activitiesApi = {
   getAll: (entityType?: string, entityId?: string) => {
+    // eslint-disable-next-line no-undef
     const params = new URLSearchParams();
     if (entityType) params.append('entityType', entityType);
     if (entityId) params.append('entityId', entityId);
