@@ -490,7 +490,9 @@ BEGIN
     WHERE id = NEW.proposal_id 
     AND status = 'accepted'
   ) THEN
-    RAISE EXCEPTION 'Agreement requires an accepted proposal (proposal % has status other than accepted)', NEW.proposal_id;
+    RAISE EXCEPTION 'Agreement requires an accepted proposal (proposal % has status ''%'' instead of ''accepted'')', 
+      NEW.proposal_id, 
+      (SELECT status FROM proposals WHERE id = NEW.proposal_id);
   END IF;
   
   RETURN NEW;
@@ -527,7 +529,9 @@ BEGIN
     WHERE id = NEW.agreement_id 
     AND signature_status = 'signed'
   ) THEN
-    RAISE EXCEPTION 'Invoice requires a signed agreement (agreement % has signature_status other than signed)', NEW.agreement_id;
+    RAISE EXCEPTION 'Invoice requires a signed agreement (agreement % has signature_status ''%'' instead of ''signed'')', 
+      NEW.agreement_id, 
+      (SELECT signature_status FROM agreements WHERE id = NEW.agreement_id);
   END IF;
   
   RETURN NEW;
