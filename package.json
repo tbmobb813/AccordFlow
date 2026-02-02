@@ -12,9 +12,9 @@
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "clean": "turbo run clean && rm -rf node_modules",
-    "db:migrate": "pnpm --filter @pest-crm/database prisma migrate dev",
-    "db:generate": "pnpm --filter @pest-crm/database prisma generate",
-    "db:studio": "pnpm --filter @pest-crm/database prisma studio"
+    "db:migrate": "npm --workspace @accordflow/database run db:migrate",
+    "db:generate": "npm --workspace @accordflow/database run db:generate",
+    "db:studio": "npm --workspace @accordflow/database run db:studio"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",

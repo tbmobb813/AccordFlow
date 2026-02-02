@@ -1,6 +1,6 @@
 import { IsString, IsEmail, IsOptional, IsEnum } from 'class-validator';
 import { ApiProperty, PartialType } from '@nestjs/swagger';
-import { ContactStatus } from '@prisma/client';
+import { ContactLifecycleStage } from '@prisma/client';
 
 export class CreateContactDto {
   @ApiProperty()
@@ -25,10 +25,10 @@ export class CreateContactDto {
   @IsString()
   company?: string;
 
-  @ApiProperty({ required: false, enum: ContactStatus })
+  @ApiProperty({ required: false, enum: ContactLifecycleStage })
   @IsOptional()
-  @IsEnum(ContactStatus)
-  status?: ContactStatus;
+  @IsEnum(ContactLifecycleStage)
+  lifecycleStage?: ContactLifecycleStage;
 
   @ApiProperty({ required: false })
   @IsOptional()
