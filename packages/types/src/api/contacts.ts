@@ -1,12 +1,17 @@
+export type ContactLifecycleStage =
+  | 'LEAD'
+  | 'QUALIFIED'
+  | 'CLIENT'
+  | 'ARCHIVED';
+
 export interface Contact {
   id: string;
   tenantId: string;
-  firstName: string;
-  lastName: string;
+  name: string;
   email: string;
   phone?: string | null;
-  company?: string | null;
-  status: string;
+  companyName?: string | null;
+  lifecycleStage: ContactLifecycleStage;
   createdAt: string;
   updatedAt: string;
 }

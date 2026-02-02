@@ -1,1 +1,1 @@
-export * from '@pest-crm/types';
+export * from '@accordflow/types';

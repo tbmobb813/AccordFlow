@@ -1,12 +1,26 @@
+export type PaymentStatus =
+  | 'PENDING'
+  | 'SUCCEEDED'
+  | 'FAILED'
+  | 'REFUNDED';
+
+export type PaymentProvider =
+  | 'STRIPE'
+  | 'MANUAL'
+  | 'OTHER';
+
 export interface Payment {
   id: string;
   tenantId: string;
+  opportunityId: string;
   invoiceId: string;
+  provider: PaymentProvider;
+  providerPaymentId?: string | null;
   amount: string;
-  status: string;
-  method?: string | null;
-  transactionId?: string | null;
-  paidAt?: string | null;
+  currency: string;
+  status: PaymentStatus;
+  succeededAt?: string | null;
+  metadata?: Record<string, any> | null;
   createdAt: string;
   updatedAt: string;
 }
