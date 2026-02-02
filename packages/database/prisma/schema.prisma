@@ -13,276 +13,316 @@ datasource db {
 // ============================================
 // TENANT & USER MANAGEMENT
 // ============================================
+// ============================================
+// CORE ENTITIES
+// ============================================
 
-model Tenant {
-  id        String   @id @default(cuid())
+model Company {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id") // Row-level isolation
   name      String
-  slug      String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  domain    String?
+  phone     String?
+  email     String?
+  address   Json?
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  users         User[]
   contacts      Contact[]
   opportunities Opportunity[]
   proposals     Proposal[]
   agreements    Agreement[]
   invoices      Invoice[]
-  payments      Payment[]
-  activities    Activity[]
-
-  @@index([slug])
-  @@map("tenants")
-}
-
-model User {
-  id           String   @id @default(cuid())
-  tenantId     String
-  clerkUserId  String   @unique
-  email        String
-  firstName    String?
-  lastName     String?
-  role         UserRole @default(USER)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  // Relations
-  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  activities Activity[]
+  activities    ActivityEvent[]
 
   @@index([tenantId])
-  @@index([clerkUserId])
-  @@map("users")
+  @@map("companies")
 }
-
-enum UserRole {
-  ADMIN
-  USER
-  VIEWER
-}
-
-// ============================================
-// WORKFLOW ENTITIES (State Machine)
-// ============================================
 
 model Contact {
-  id          String        @id @default(cuid())
-  tenantId    String
-  firstName   String
-  lastName    String
-  email       String
-  phone       String?
-  company     String?
-  status      ContactStatus @default(ACTIVE)
-  source      String?
-  notes       String?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  companyId String   @map("company_id")
+  firstName String   @map("first_name")
+  lastName  String   @map("last_name")
+  email     String
+  phone     String?
+  role      String?
+  isPrimary Boolean  @default(false) @map("is_primary")
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  company       Company         @relation(fields: [companyId], references: [id])
   opportunities Opportunity[]
+  activities    ActivityEvent[]
 
   @@index([tenantId])
-  @@index([email])
+  @@index([companyId])
   @@map("contacts")
 }
 
-enum ContactStatus {
-  ACTIVE
-  INACTIVE
+enum OpportunityState {
+  LEAD
   QUALIFIED
-  UNQUALIFIED
+  PROPOSAL_SENT
+  NEGOTIATION
+  AGREEMENT_PENDING
+  AGREEMENT_SIGNED
+  INVOICE_SENT
+  PAYMENT_PENDING
+  WON
+  LOST
+
+  @@map("opportunity_state")
 }
 
 model Opportunity {
-  id          String            @id @default(cuid())
-  tenantId    String
-  contactId   String
-  title       String
-  description String?
+  id          String            @id @default(uuid())
+  tenantId    String            @map("tenant_id")
+  companyId   String            @map("company_id")
+  contactId   String?           @map("contact_id")
+  name        String
+  state       OpportunityState  @default(LEAD)
   value       Decimal?          @db.Decimal(10, 2)
-  stage       OpportunityStage  @default(PROSPECTING)
-  probability Int               @default(0)
-  expectedCloseDate DateTime?
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  probability Int?              // 0-100
+  expectedCloseDate DateTime?   @map("expected_close_date")
+  metadata    Json?
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
 
   // Relations
-  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  contact    Contact    @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  company    Company         @relation(fields: [companyId], references: [id])
+  contact    Contact?        @relation(fields: [contactId], references: [id])
   proposals  Proposal[]
+  agreements Agreement[]
+  invoices   Invoice[]
+  payments   Payment[]
+  activities ActivityEvent[]
 
   @@index([tenantId])
-  @@index([contactId])
+  @@index([companyId])
+  @@index([state])
   @@map("opportunities")
 }
 
-enum OpportunityStage {
-  PROSPECTING
-  QUALIFICATION
-  PROPOSAL
-  NEGOTIATION
-  CLOSED_WON
-  CLOSED_LOST
+// ============================================
+// PROPOSALS & AGREEMENTS
+// ============================================
+
+enum ProposalStatus {
+  DRAFT
+  SENT
+  VIEWED
+  SIGNED
+  EXPIRED
+
+  @@map("proposal_status")
 }
 
 model Proposal {
-  id            String         @id @default(cuid())
-  tenantId      String
-  opportunityId String
-  title         String
-  content       String?
-  totalAmount   Decimal        @db.Decimal(10, 2)
+  id            String         @id @default(uuid())
+  tenantId      String         @map("tenant_id")
+  companyId     String         @map("company_id")
+  opportunityId String         @map("opportunity_id")
   status        ProposalStatus @default(DRAFT)
-  validUntil    DateTime?
-  sentAt        DateTime?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  content       Json           // Template data
+  fileUrl       String?        @map("file_url") // S3 URL
+  sentAt        DateTime?      @map("sent_at")
+  viewedAt      DateTime?      @map("viewed_at")
+  expiresAt     DateTime?      @map("expires_at")
+  metadata      Json?
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
 
   // Relations
-  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
-  agreements  Agreement[]
+  company     Company       @relation(fields: [companyId], references: [id])
+  opportunity Opportunity   @relation(fields: [opportunityId], references: [id])
+  agreement   Agreement?
+  activities  ActivityEvent[]
 
   @@index([tenantId])
   @@index([opportunityId])
   @@map("proposals")
 }
 
-enum ProposalStatus {
-  DRAFT
-  SENT
-  VIEWED
-  ACCEPTED
-  REJECTED
-  EXPIRED
+enum AgreementStatus {
+  PENDING
+  SENT_FOR_SIGNATURE
+  PARTIALLY_SIGNED
+  FULLY_SIGNED
+  VOIDED
+
+  @@map("agreement_status")
 }
 
 model Agreement {
-  id          String          @id @default(cuid())
-  tenantId    String
-  proposalId  String
-  title       String
-  content     String?
-  status      AgreementStatus @default(DRAFT)
-  signedAt    DateTime?
-  effectiveDate DateTime?
-  expiryDate  DateTime?
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  id                  String          @id @default(uuid())
+  tenantId            String          @map("tenant_id")
+  companyId           String          @map("company_id")
+  opportunityId       String          @map("opportunity_id")
+  proposalId          String          @unique @map("proposal_id")
+  status              AgreementStatus @default(PENDING)
+  signatureProviderId String?         @map("signature_provider_id") // Dropbox Sign ID
+  fileUrl             String?         @map("file_url") // Signed PDF URL
+  sentForSignatureAt  DateTime?       @map("sent_for_signature_at")
+  fullySignedAt       DateTime?       @map("fully_signed_at")
+  metadata            Json?
+  createdAt           DateTime        @default(now()) @map("created_at")
+  updatedAt           DateTime        @updatedAt @map("updated_at")
 
   // Relations
-  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  proposal   Proposal   @relation(fields: [proposalId], references: [id], onDelete: Cascade)
-  invoices   Invoice[]
+  company     Company       @relation(fields: [companyId], references: [id])
+  opportunity Opportunity   @relation(fields: [opportunityId], references: [id])
+  proposal    Proposal      @relation(fields: [proposalId], references: [id])
+  invoice     Invoice?
+  activities  ActivityEvent[]
 
   @@index([tenantId])
-  @@index([proposalId])
+  @@index([opportunityId])
   @@map("agreements")
 }
 
-enum AgreementStatus {
-  DRAFT
-  PENDING_SIGNATURE
-  SIGNED
-  ACTIVE
-  EXPIRED
-  TERMINATED
-}
-
-model Invoice {
-  id          String        @id @default(cuid())
-  tenantId    String
-  agreementId String
-  invoiceNumber String
-  amount      Decimal       @db.Decimal(10, 2)
-  status      InvoiceStatus @default(DRAFT)
-  dueDate     DateTime
-  issuedAt    DateTime?
-  paidAt      DateTime?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-
-  // Relations
-  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  agreement  Agreement  @relation(fields: [agreementId], references: [id], onDelete: Cascade)
-  payments   Payment[]
-
-  @@unique([tenantId, invoiceNumber])
-  @@index([tenantId])
-  @@index([agreementId])
-  @@map("invoices")
-}
+// ============================================
+// INVOICES & PAYMENTS
+// ============================================
 
 enum InvoiceStatus {
   DRAFT
   SENT
   VIEWED
-  PARTIAL_PAYMENT
   PAID
   OVERDUE
-  CANCELLED
+  VOIDED
+
+  @@map("invoice_status")
 }
 
-model Payment {
-  id            String        @id @default(cuid())
-  tenantId      String
-  invoiceId     String
-  amount        Decimal       @db.Decimal(10, 2)
-  status        PaymentStatus @default(PENDING)
-  method        String?
-  transactionId String?
-  paidAt        DateTime?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+model Invoice {
+  id              String        @id @default(uuid())
+  tenantId        String        @map("tenant_id")
+  companyId       String        @map("company_id")
+  opportunityId   String        @map("opportunity_id")
+  agreementId     String?       @unique @map("agreement_id")
+  invoiceNumber   String        @unique @map("invoice_number")
+  status          InvoiceStatus @default(DRAFT)
+  amount          Decimal       @db.Decimal(10, 2)
+  stripeInvoiceId String?       @unique @map("stripe_invoice_id")
+  fileUrl         String?       @map("file_url")
+  sentAt          DateTime?     @map("sent_at")
+  viewedAt        DateTime?     @map("viewed_at")
+  dueDate         DateTime?     @map("due_date")
+  paidAt          DateTime?     @map("paid_at")
+  metadata        Json?
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
 
   // Relations
-  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  invoice    Invoice    @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  company     Company       @relation(fields: [companyId], references: [id])
+  opportunity Opportunity   @relation(fields: [opportunityId], references: [id])
+  agreement   Agreement?    @relation(fields: [agreementId], references: [id])
+  payments    Payment[]
+  activities  ActivityEvent[]
 
   @@index([tenantId])
-  @@index([invoiceId])
-  @@map("payments")
+  @@index([opportunityId])
+  @@index([status])
+  @@map("invoices")
 }
 
 enum PaymentStatus {
   PENDING
   PROCESSING
-  COMPLETED
+  SUCCEEDED
   FAILED
   REFUNDED
+
+  @@map("payment_status")
 }
 
-// ============================================
-// EVENT SOURCING & ACTIVITY TIMELINE
-// ============================================
-
-model Activity {
-  id         String       @id @default(cuid())
-  tenantId   String
-  userId     String?
-  entityType EntityType
-  entityId   String
-  action     String
-  metadata   Json?
-  createdAt  DateTime     @default(now())
+model Payment {
+  id               String        @id @default(uuid())
+  tenantId         String        @map("tenant_id")
+  opportunityId    String        @map("opportunity_id")
+  invoiceId        String        @map("invoice_id")
+  amount           Decimal       @db.Decimal(10, 2)
+  status           PaymentStatus @default(PENDING)
+  stripePaymentId  String?       @unique @map("stripe_payment_id")
+  paymentMethod    String?       @map("payment_method") // card, ach, etc.
+  processedAt      DateTime?     @map("processed_at")
+  metadata         Json?
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
 
   // Relations
-  tenant        Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user          User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  opportunity Opportunity   @relation(fields: [opportunityId], references: [id])
+  invoice     Invoice       @relation(fields: [invoiceId], references: [id])
+  activities  ActivityEvent[]
 
   @@index([tenantId])
-  @@index([entityType, entityId])
-  @@index([createdAt])
-  @@map("activities")
+  @@index([opportunityId])
+  @@index([invoiceId])
+  @@index([status])
+  @@map("payments")
 }
 
-enum EntityType {
-  CONTACT
-  OPPORTUNITY
-  PROPOSAL
-  AGREEMENT
-  INVOICE
-  PAYMENT
+// ============================================
+// ACTIVITY LOG (Append-Only)
+// ============================================
+
+enum ActivityType {
+  COMPANY_CREATED
+  CONTACT_CREATED
+  OPPORTUNITY_CREATED
+  OPPORTUNITY_STATE_CHANGED
+  PROPOSAL_CREATED
+  PROPOSAL_SENT
+  PROPOSAL_VIEWED
+  AGREEMENT_CREATED
+  AGREEMENT_SENT
+  AGREEMENT_SIGNED
+  INVOICE_CREATED
+  INVOICE_SENT
+  INVOICE_VIEWED
+  PAYMENT_RECEIVED
+  PAYMENT_FAILED
+  NOTE_ADDED
+  EMAIL_SENT
+
+  @@map("activity_type")
+}
+
+model ActivityEvent {
+  id            String       @id @default(uuid())
+  tenantId      String       @map("tenant_id")
+  type          ActivityType
+  companyId     String?      @map("company_id")
+  contactId     String?      @map("contact_id")
+  opportunityId String?      @map("opportunity_id")
+  proposalId    String?      @map("proposal_id")
+  agreementId   String?      @map("agreement_id")
+  invoiceId     String?      @map("invoice_id")
+  paymentId     String?      @map("payment_id")
+  userId        String?      @map("user_id") // Clerk user ID
+  metadata      Json?
+  createdAt     DateTime     @default(now()) @map("created_at")
+
+  // Relations
+  company     Company?     @relation(fields: [companyId], references: [id])
+  contact     Contact?     @relation(fields: [contactId], references: [id])
+  opportunity Opportunity? @relation(fields: [opportunityId], references: [id])
+  proposal    Proposal?    @relation(fields: [proposalId], references: [id])
+  agreement   Agreement?   @relation(fields: [agreementId], references: [id])
+  invoice     Invoice?     @relation(fields: [invoiceId], references: [id])
+  payment     Payment?     @relation(fields: [paymentId], references: [id])
+
+  @@index([tenantId])
+  @@index([companyId])
+  @@index([opportunityId])
+  @@index([type])
+  @@index([createdAt])
+  @@map("activity_events")
 }
