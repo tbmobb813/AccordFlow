@@ -15,6 +15,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - name: Configure npm auth (optional)
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -n "$NPM_TOKEN" ]; then
+            echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > ~/.npmrc
+            npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
+          else
+            echo "No NPM_TOKEN provided; skipping npm auth setup"
+          fi
       - name: Install dependencies
         run: |
           if [ -f package-lock.json ]; then
