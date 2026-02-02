@@ -1,0 +1,1641 @@
+openapi: 3.1.0
+info:
+  title: Canonical CRM Platform API
+  version: 1.0.0
+  description: >
+    Tenant-scoped, event-driven CRM platform API.
+    This specification encodes strict workflows, immutability rules,
+    and domain service boundaries. All state transitions emit events.
+    All mutating operations return canonical object + event pairs.
+
+servers:
+  - url: https://api.example.com/v1
+
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Client-generated UUID to ensure idempotent processing
+
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Pagination cursor from previous response
+
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+      description: Maximum number of items to return
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Forbidden:
+      description: Permission denied
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Conflict:
+      description: Illegal state transition
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: "INVALID_STATE_TRANSITION"
+            message: "Cannot convert inquiry with status 'new'"
+            details:
+              current_status: "new"
+              required_status: "in_review"
+              allowed_transitions: ["in_review", "rejected"]
+
+    Unprocessable:
+      description: Invalid request for current state
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Machine-readable error code
+          example: "INVALID_STATE_TRANSITION"
+        message:
+          type: string
+          description: Human-readable error message
+          example: "Cannot send proposal in draft status"
+        details:
+          type: object
+          description: Additional context about the error
+          additionalProperties: true
+
+    ListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: {}
+        next_cursor:
+          type: string
+          nullable: true
+          description: Cursor for next page, null if no more results
+        has_more:
+          type: boolean
+          description: Whether more results exist
+
+    # Core domain schemas
+
+    Contact:
+      type: object
+      required: [id, name, email, lifecycle_stage, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+          nullable: true
+        company_name:
+          type: string
+          nullable: true
+        lifecycle_stage:
+          type: string
+          enum: [lead, qualified, client, archived]
+          description: >
+            Lifecycle progression:
+            lead → qualified → client → archived
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Inquiry:
+      type: object
+      required: [id, contact_id, message, source, channel, status, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        contact_id:
+          type: string
+          format: uuid
+        message:
+          type: string
+        source:
+          type: string
+          enum: [form, manual, import, api]
+        channel:
+          type: string
+          enum: [web, email, phone, social]
+        status:
+          type: string
+          enum: [new, in_review, converted, rejected]
+          description: >
+            State machine:
+            new → in_review → converted (terminal)
+            new → rejected (terminal)
+            in_review → rejected (terminal)
+        created_at:
+          type: string
+          format: date-time
+        converted_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp when converted to opportunity
+
+    Opportunity:
+      type: object
+      required: [id, contact_id, name, pipeline_id, stage_id, status, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        contact_id:
+          type: string
+          format: uuid
+        inquiry_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Source inquiry if created via conversion
+        name:
+          type: string
+        pipeline_id:
+          type: string
+          format: uuid
+        stage_id:
+          type: string
+          format: uuid
+        value_estimate:
+          type: number
+          format: decimal
+          nullable: true
+        currency:
+          type: string
+          default: "USD"
+          pattern: "^[A-Z]{3}$"
+        status:
+          type: string
+          enum: [open, won, lost]
+          description: >
+            Terminal states: won, lost
+            Only open opportunities can progress through stages
+        closed_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Pipeline:
+      type: object
+      required: [id, name, is_default, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        is_default:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    Stage:
+      type: object
+      required: [id, pipeline_id, name, position, probability]
+      properties:
+        id:
+          type: string
+          format: uuid
+        pipeline_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        position:
+          type: integer
+          description: Display order within pipeline
+        probability:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Win probability percentage for this stage
+
+    Meeting:
+      type: object
+      required: [id, opportunity_id, scheduled_start, scheduled_end, location_type, status, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        opportunity_id:
+          type: string
+          format: uuid
+        scheduled_start:
+          type: string
+          format: date-time
+        scheduled_end:
+          type: string
+          format: date-time
+        location_type:
+          type: string
+          enum: [video, phone, in_person]
+        location_details:
+          type: string
+          nullable: true
+          description: Meeting link, phone number, or address
+        status:
+          type: string
+          enum: [scheduled, completed, canceled, no_show]
+          description: >
+            State machine:
+            scheduled → completed | canceled | no_show (all terminal)
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    Proposal:
+      type: object
+      required: [id, opportunity_id, title, total_amount, currency, status, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        opportunity_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        total_amount:
+          type: number
+          format: decimal
+        currency:
+          type: string
+          pattern: "^[A-Z]{3}$"
+        status:
+          type: string
+          enum: [draft, sent, viewed, accepted, rejected, expired]
+          description: >
+            State machine:
+            draft → sent → viewed → accepted (terminal)
+            sent → expired (terminal)
+            viewed → rejected (terminal)
+        sent_at:
+          type: string
+          format: date-time
+          nullable: true
+        viewed_at:
+          type: string
+          format: date-time
+          nullable: true
+        responded_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Agreement:
+      type: object
+      required: [id, proposal_id, title, signature_status, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        proposal_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        signature_status:
+          type: string
+          enum: [draft, sent, signed, declined, canceled]
+          description: >
+            State machine:
+            draft → sent → signed (terminal)
+            sent → declined (terminal)
+            draft|sent → canceled (terminal)
+        sent_at:
+          type: string
+          format: date-time
+          nullable: true
+        signed_at:
+          type: string
+          format: date-time
+          nullable: true
+        signer_name:
+          type: string
+          nullable: true
+        signer_email:
+          type: string
+          format: email
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Invoice:
+      type: object
+      required: [id, agreement_id, number, total_amount, currency, status, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        agreement_id:
+          type: string
+          format: uuid
+        number:
+          type: string
+          description: Human-readable invoice number (auto-generated)
+        total_amount:
+          type: number
+          format: decimal
+        amount_paid:
+          type: number
+          format: decimal
+          default: 0
+        currency:
+          type: string
+          pattern: "^[A-Z]{3}$"
+        due_date:
+          type: string
+          format: date
+          nullable: true
+        status:
+          type: string
+          enum: [draft, sent, partially_paid, paid, void, overdue]
+          description: >
+            State machine:
+            draft → sent → partially_paid → paid (terminal)
+            sent → overdue → paid (terminal)
+            draft|sent → void (terminal)
+        sent_at:
+          type: string
+          format: date-time
+          nullable: true
+        paid_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Payment:
+      type: object
+      required: [id, invoice_id, provider, amount, currency, status, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        invoice_id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+          enum: [stripe, manual, other]
+        provider_payment_id:
+          type: string
+          nullable: true
+          description: External payment ID from provider
+        amount:
+          type: number
+          format: decimal
+        currency:
+          type: string
+          pattern: "^[A-Z]{3}$"
+        status:
+          type: string
+          enum: [pending, succeeded, failed, refunded]
+          description: >
+            State machine:
+            pending → succeeded (terminal)
+            pending → failed (terminal)
+            succeeded → refunded (terminal)
+        succeeded_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    # Event system
+
+    ActivityEvent:
+      type: object
+      required: [id, event_type, object_type, object_id, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        event_type:
+          type: string
+          description: Action that occurred
+          examples:
+            - contact.created
+            - inquiry.converted
+            - proposal.sent
+            - invoice.paid
+        object_type:
+          type: string
+          enum: [contact, inquiry, opportunity, meeting, proposal, agreement, invoice, payment]
+        object_id:
+          type: string
+          format: uuid
+        actor_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: User who triggered the event
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Event-specific context
+        created_at:
+          type: string
+          format: date-time
+
+    # Canonical response wrappers
+
+    MutationResponse:
+      type: object
+      required: [object, event]
+      properties:
+        object:
+          type: object
+          description: Updated canonical state
+        event:
+          $ref: '#/components/schemas/ActivityEvent'
+          description: Activity event emitted for this mutation
+
+paths:
+
+  # ============================================================================
+  # CONTACTS
+  # ============================================================================
+
+  /contacts:
+    post:
+      summary: Create contact
+      operationId: createContact
+      tags: [Contacts]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email]
+              properties:
+                name: { type: string }
+                email: { type: string, format: email }
+                phone: { type: string }
+                company_name: { type: string }
+      responses:
+        '200':
+          description: Contact created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/MutationResponse'
+                  - properties:
+                      object:
+                        $ref: '#/components/schemas/Contact'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    get:
+      summary: List contacts
+      operationId: listContacts
+      tags: [Contacts]
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: lifecycle_stage
+          in: query
+          schema:
+            type: string
+            enum: [lead, qualified, client, archived]
+      responses:
+        '200':
+          description: List of contacts
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListResponse'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Contact'
+
+  /contacts/{id}:
+    get:
+      summary: Get contact
+      operationId: getContact
+      tags: [Contacts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Contact detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contact'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      summary: Update contact
+      operationId: updateContact
+      tags: [Contacts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                phone: { type: string }
+                company_name: { type: string }
+                lifecycle_stage:
+                  type: string
+                  enum: [lead, qualified, client, archived]
+      responses:
+        '200':
+          description: Updated contact
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/MutationResponse'
+                  - properties:
+                      object:
+                        $ref: '#/components/schemas/Contact'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  # ============================================================================
+  # INQUIRIES
+  # ============================================================================
+
+  /inquiries:
+    post:
+      summary: Create inquiry
+      operationId: createInquiry
+      tags: [Inquiries]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contact_id, message, source, channel]
+              properties:
+                contact_id: { type: string, format: uuid }
+                message: { type: string }
+                source:
+                  type: string
+                  enum: [form, manual, import, api]
+                channel:
+                  type: string
+                  enum: [web, email, phone, social]
+      responses:
+        '200':
+          description: Inquiry created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/MutationResponse'
+                  - properties:
+                      object:
+                        $ref: '#/components/schemas/Inquiry'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+    get:
+      summary: List inquiries
+      operationId: listInquiries
+      tags: [Inquiries]
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [new, in_review, converted, rejected]
+        - name: contact_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of inquiries
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListResponse'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Inquiry'
+
+  /inquiries/{id}:
+    get:
+      summary: Get inquiry
+      operationId: getInquiry
+      tags: [Inquiries]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Inquiry detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Inquiry'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      summary: Update inquiry status
+      operationId: updateInquiry
+      tags: [Inquiries]
+      description: >
+        Update inquiry status. Valid transitions:
+        new → in_review, new → rejected,
+        in_review → converted, in_review → rejected
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [in_review, rejected]
+      responses:
+        '200':
+          description: Updated inquiry
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/MutationResponse'
+                  - properties:
+                      object:
+                        $ref: '#/components/schemas/Inquiry'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /inquiries/{id}/convert:
+    post:
+      summary: Convert inquiry to opportunity
+      operationId: convertInquiry
+      tags: [Inquiries]
+      description: >
+        Creates opportunity and marks inquiry as converted.
+        Requires inquiry status = 'in_review'.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  description: Name for the new opportunity
+                pipeline_id:
+                  type: string
+                  format: uuid
+                  description: If not provided, uses default pipeline
+                value_estimate:
+                  type: number
+                  format: decimal
+                currency:
+                  type: string
+                  pattern: "^[A-Z]{3}$"
+                  default: "USD"
+      responses:
+        '200':
+          description: Opportunity created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/MutationResponse'
+                  - properties:
+                      object:
+                        $ref: '#/components/schemas/Opportunity'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+
+  # ============================================================================
+  # PIPELINES & STAGES
+  # ============================================================================
+
+  /pipelines:
+    get:
+      summary: List pipelines
+      operationId: listPipelines
+      tags: [Pipelines]
+      responses:
+        '200':
+          description: List of pipelines
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListResponse'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Pipeline'
+
+  /pipelines/{id}/stages:
+    get:
+      summary: List stages in pipeline
+      operationId: listStages
+      tags: [Pipelines]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: List of stages (ordered by position)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListResponse'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Stage'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ============================================================================
+  # OPPORTUNITIES
+  # ============================================================================
+
+  /opportunities:
+    get:
+      summary: List opportunities
+      operationId: listOpportunities
+      tags: [Opportunities]
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [open, won, lost]
+        - name: pipeline_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: stage_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of opportunities
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListResponse'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Opportunity'
+
+  /opportunities/{id}:
+    get:
+      summary: Get opportunity
+      operationId: getOpportunity
+      tags: [Opportunities]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Opportunity detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Opportunity'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      summary: Update opportunity
+      operationId: updateOpportunity
+      tags: [Opportunities]
+      description: >
+        Update opportunity fields. Stage changes must respect pipeline sequence.
+        Status changes to won/lost are terminal.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                stage_id: { type: string, format: uuid }
+                value_estimate: { type: number, format: decimal }
+                status:
+                  type: string
+                  enum: [won, lost]
+      responses:
+        '200':
+          description: Updated opportunity
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/MutationResponse'
+                  - properties:
+                      object:
+                        $ref: '#/components/schemas/Opportunity'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /opportunities/{id}/meetings:
+    post:
+      summary: Schedule meeting
+      operationId: scheduleMeeting
+      tags: [Opportunities]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scheduled_start, scheduled_end, location_type]
+              properties:
+                scheduled_start: { type: string, format: date-time }
+                scheduled_end: { type: string, format: date-time }
+                location_type:
+                  type: string
+                  enum: [video, phone, in_person]
+                location_details: { type: string }
+      responses:
+        '200':
+          description: Meeting scheduled
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/MutationResponse'
+                  - properties:
+                      object:
+                        $ref: '#/components/schemas/Meeting'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /opportunities/{id}/proposals:
+    post:
+      summary: Create draft proposal
+      operationId: createProposal
+      tags: [Opportunities]
+      description: >
+        Creates a new proposal in draft status.
+        Opportunity must be in open status.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, total_amount]
+              properties:
+                title: { type: string }
+                total_amount: { type: number, format: decimal }
+                currency:
+                  type: string
+                  pattern: "^[A-Z]{3}$"
+                  default: "USD"
+      responses:
+        '200':
+          description: Proposal created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/MutationResponse'
+                  - properties:
+                      object:
+                        $ref: '#/components/schemas/Proposal'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  # ============================================================================
+  # MEETINGS
+  # ============================================================================
+
+  /meetings/{id}:
+    get:
+      summary: Get meeting
+      operationId: getMeeting
+      tags: [Meetings]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Meeting detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Meeting'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      summary: Update meeting status
+      operationId: updateMeeting
+      tags: [Meetings]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [completed, canceled, no_show]
+                scheduled_start: { type: string, format: date-time }
+                scheduled_end: { type: string, format: date-time }
+                location_details: { type: string }
+      responses:
+        '200':
+          description: Updated meeting
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/MutationResponse'
+                  - properties:
+                      object:
+                        $ref: '#/components/schemas/Meeting'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  # ============================================================================
+  # PROPOSALS
+  # ============================================================================
+
+  /proposals/{id}:
+    get:
+      summary: Get proposal
+      operationId: getProposal
+      tags: [Proposals]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Proposal detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Proposal'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      summary: Update draft proposal
+      operationId: updateProposal
+      tags: [Proposals]
+      description: Only draft proposals can be edited
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string }
+                total_amount: { type: number, format: decimal }
+      responses:
+        '200':
+          description: Updated proposal
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/MutationResponse'
+                  - properties:
+                      object:
+                        $ref: '#/components/schemas/Proposal'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /proposals/{id}/send:
+    post:
+      summary: Send proposal
+      operationId: sendProposal
+      tags: [Proposals]
+      description: >
+        Transitions proposal from draft to sent.
+        Idempotent - subsequent calls return success if already sent.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Proposal sent
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/MutationResponse'
+                  - properties:
+                      object:
+                        $ref: '#/components/schemas/Proposal'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /proposals/{id}/agreements:
+    post:
+      summary: Generate agreement from accepted proposal
+      operationId: createAgreement
+      tags: [Proposals]
+      description: >
+        Creates agreement in draft status.
+        Proposal must be in accepted status.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title:
+                  type: string
+                  description: Agreement title
+                signer_name: { type: string }
+                signer_email: { type: string, format: email }
+      responses:
+        '200':
+          description: Agreement created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/MutationResponse'
+                  - properties:
+                      object:
+                        $ref: '#/components/schemas/Agreement'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  # ============================================================================
+  # AGREEMENTS
+  # ============================================================================
+
+  /agreements/{id}:
+    get:
+      summary: Get agreement
+      operationId: getAgreement
+      tags: [Agreements]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Agreement detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Agreement'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      summary: Update draft agreement
+      operationId: updateAgreement
+      tags: [Agreements]
+      description: Only draft agreements can be edited
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string }
+                signer_name: { type: string }
+                signer_email: { type: string, format: email }
+      responses:
+        '200':
+          description: Updated agreement
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/MutationResponse'
+                  - properties:
+                      object:
+                        $ref: '#/components/schemas/Agreement'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /agreements/{id}/send:
+    post:
+      summary: Send agreement for signature
+      operationId: sendAgreement
+      tags: [Agreements]
+      description: >
+        Transitions agreement from draft to sent.
+        Idempotent operation.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Agreement sent
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/MutationResponse'
+                  - properties:
+                      object:
+                        $ref: '#/components/schemas/Agreement'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /agreements/{id}/invoices:
+    post:
+      summary: Generate invoice from signed agreement
+      operationId: createInvoice
+      tags: [Agreements]
+      description: >
+        Creates invoice in draft status.
+        Agreement must be in signed status.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [total_amount]
+              properties:
+                total_amount:
+                  type: number
+                  format: decimal
+                currency:
+                  type: string
+                  pattern: "^[A-Z]{3}$"
+                  default: "USD"
+                due_date:
+                  type: string
+                  format: date
+      responses:
+        '200':
+          description: Invoice created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/MutationResponse'
+                  - properties:
+                      object:
+                        $ref: '#/components/schemas/Invoice'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  # ============================================================================
+  # INVOICES
+  # ============================================================================
+
+  /invoices/{id}:
+    get:
+      summary: Get invoice
+      operationId: getInvoice
+      tags: [Invoices]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Invoice detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invoice'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      summary: Update draft invoice
+      operationId: updateInvoice
+      tags: [Invoices]
+      description: Only draft invoices can be edited
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                total_amount: { type: number, format: decimal }
+                due_date: { type: string, format: date }
+      responses:
+        '200':
+          description: Updated invoice
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/MutationResponse'
+                  - properties:
+                      object:
+                        $ref: '#/components/schemas/Invoice'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /invoices/{id}/send:
+    post:
+      summary: Send invoice
+      operationId: sendInvoice
+      tags: [Invoices]
+      description: >
+        Transitions invoice from draft to sent.
+        Idempotent operation.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Invoice sent
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/MutationResponse'
+                  - properties:
+                      object:
+                        $ref: '#/components/schemas/Invoice'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /invoices/{id}/void:
+    post:
+      summary: Void invoice
+      operationId: voidInvoice
+      tags: [Invoices]
+      description: >
+        Transitions invoice to void status. Terminal state.
+        Cannot void paid invoices.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Invoice voided
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/MutationResponse'
+                  - properties:
+                      object:
+                        $ref: '#/components/schemas/Invoice'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  # ============================================================================
+  # PAYMENTS
+  # ============================================================================
+
+  /payments:
+    post:
+      summary: Record manual payment
+      operationId: createPayment
+      tags: [Payments]
+      description: >
+        Record manual payment against invoice.
+        Updates invoice status automatically.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [invoice_id, amount, currency]
+              properties:
+                invoice_id: { type: string, format: uuid }
+                amount: { type: number, format: decimal }
+                currency: { type: string, pattern: "^[A-Z]{3}$" }
+                provider:
+                  type: string
+                  enum: [manual, other]
+                  default: manual
+      responses:
+        '200':
+          description: Payment recorded
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/MutationResponse'
+                  - properties:
+                      object:
+                        $ref: '#/components/schemas/Payment'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /payments/stripe-webhook:
+    post:
+      summary: Stripe webhook receiver
+      operationId: handleStripeWebhook
+      tags: [Payments]
+      description: >
+        Receives Stripe payment events.
+        Creates payment record and updates invoice status.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider_payment_id, amount, currency, status]
+              properties:
+                provider_payment_id: { type: string }
+                invoice_id: { type: string, format: uuid }
+                amount: { type: number, format: decimal }
+                currency: { type: string, pattern: "^[A-Z]{3}$" }
+                status:
+                  type: string
+                  enum: [succeeded, failed]
+      responses:
+        '200':
+          description: Webhook processed
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/MutationResponse'
+                  - properties:
+                      object:
+                        $ref: '#/components/schemas/Payment'
+
+  # ============================================================================
+  # ACTIVITY TIMELINE
+  # ============================================================================
+
+  /activity/{object_type}/{object_id}:
+    get:
+      summary: Get activity timeline for object
+      operationId: getActivityTimeline
+      tags: [Activity]
+      description: >
+        Retrieve chronological activity timeline for any object.
+        Returns events in reverse chronological order (newest first).
+      parameters:
+        - name: object_type
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [contact, inquiry, opportunity, meeting, proposal, agreement, invoice, payment]
+        - name: object_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: event_type
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by specific event type (e.g., "proposal.sent")
+      responses:
+        '200':
+          description: Activity timeline
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListResponse'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ActivityEvent'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+tags:
+  - name: Contacts
+    description: Contact management
+  - name: Inquiries
+    description: Inbound inquiry handling
+  - name: Pipelines
+    description: Pipeline and stage configuration
+  - name: Opportunities
+    description: Sales opportunity management
+  - name: Meetings
+    description: Meeting scheduling and tracking
+  - name: Proposals
+    description: Proposal creation and sending
+  - name: Agreements
+    description: Agreement generation and signature
+  - name: Invoices
+    description: Invoice creation and delivery
+  - name: Payments
+    description: Payment processing and recording
+  - name: Activity
+    description: Activity timeline and events
