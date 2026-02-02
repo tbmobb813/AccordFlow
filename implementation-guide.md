@@ -166,10 +166,7 @@ CREATE TABLE inquiries (
     CHECK (status IN ('new', 'in_review', 'converted', 'rejected')),
   converted_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  CHECK (
-    (status = 'converted' AND converted_at IS NOT NULL) OR
-    (status != 'converted' AND converted_at IS NULL)
-  )
+  CHECK ((status = 'converted') = (converted_at IS NOT NULL))
 );
 
 CREATE INDEX idx_inquiries_tenant_status 
@@ -208,12 +205,7 @@ CREATE TABLE opportunities (
   closed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
-  CHECK (
-    (status IN ('won', 'lost') AND closed_at IS NOT NULL) OR
-    (status = 'open' AND closed_at IS NULL)
-  ),
-  FOREIGN KEY (pipeline_id, stage_id) 
-    REFERENCES stages(pipeline_id, id)
+  CHECK ((status IN ('won', 'lost')) = (closed_at IS NOT NULL))
 );
 
 CREATE INDEX idx_opportunities_tenant_status 
@@ -232,10 +224,7 @@ CREATE TABLE meetings (
   completed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   CHECK (scheduled_end > scheduled_start),
-  CHECK (
-    (status = 'completed' AND completed_at IS NOT NULL) OR
-    (status != 'completed' AND completed_at IS NULL)
-  )
+  CHECK ((status = 'completed') = (completed_at IS NOT NULL))
 );
 
 CREATE TABLE proposals (
@@ -252,10 +241,7 @@ CREATE TABLE proposals (
   responded_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
-  CHECK (
-    (status != 'draft' AND sent_at IS NOT NULL) OR
-    (status = 'draft' AND sent_at IS NULL)
-  )
+  CHECK ((status = 'draft') = (sent_at IS NULL))
 );
 
 CREATE TABLE agreements (
@@ -271,10 +257,7 @@ CREATE TABLE agreements (
   signer_email VARCHAR(255),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
-  CHECK (
-    (signature_status != 'draft' AND sent_at IS NOT NULL) OR
-    (signature_status = 'draft' AND sent_at IS NULL)
-  )
+  CHECK ((signature_status = 'draft') = (sent_at IS NULL))
 );
 
 CREATE TABLE invoices (
@@ -468,84 +451,56 @@ async function sendProposal(
 
 ### Rule 1: Proposal → Agreement Requirement
 ```sql
--- Constraint: Agreement requires accepted proposal
--- Note: PostgreSQL does not support subqueries in CHECK constraints,
--- so we use a trigger instead
-CREATE OR REPLACE FUNCTION check_proposal_accepted()
+-- Trigger-based validation: Agreement requires accepted proposal
+CREATE OR REPLACE FUNCTION validate_agreement_proposal_accepted()
 RETURNS TRIGGER AS $$
-DECLARE
-  v_proposal_status TEXT;
 BEGIN
-  -- Allow NULL proposal_id if the column is nullable
-  IF NEW.proposal_id IS NULL THEN
-    RETURN NEW;
+  IF NOT EXISTS (
+    SELECT 1
+    FROM proposals
+    WHERE proposals.id = NEW.proposal_id
+      AND proposals.status = 'accepted'
+  ) THEN
+    RAISE EXCEPTION 'Agreement requires an accepted proposal (proposal_id=%)', NEW.proposal_id
+      USING ERRCODE = '23514'; -- check_violation
   END IF;
-  
-  -- Check if proposal exists and get its status
-  SELECT status INTO v_proposal_status
-  FROM proposals 
-  WHERE id = NEW.proposal_id;
-  
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'Proposal with id % does not exist', NEW.proposal_id;
-  END IF;
-  
-  -- Check if proposal is accepted
-  IF v_proposal_status != 'accepted' THEN
-    RAISE EXCEPTION 'Agreement requires an accepted proposal (proposal % has status ''%'' instead of ''accepted'')', 
-      NEW.proposal_id, 
-      v_proposal_status;
-  END IF;
-  
+
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER enforce_proposal_accepted
-  BEFORE INSERT OR UPDATE OF proposal_id ON agreements
-  FOR EACH ROW
-  EXECUTE FUNCTION check_proposal_accepted();
+CREATE TRIGGER trg_validate_agreement_proposal_accepted
+BEFORE INSERT OR UPDATE ON agreements
+FOR EACH ROW
+EXECUTE FUNCTION validate_agreement_proposal_accepted();
 ```
 
 ### Rule 2: Agreement → Invoice Requirement
 ```sql
--- Constraint: Invoice requires signed agreement
--- Note: PostgreSQL does not support subqueries in CHECK constraints,
--- so we use a trigger instead
-CREATE OR REPLACE FUNCTION check_agreement_signed()
+-- Trigger-based validation: Invoice requires signed agreement
+CREATE OR REPLACE FUNCTION validate_invoice_agreement_signed()
 RETURNS TRIGGER AS $$
-DECLARE
-  v_signature_status TEXT;
 BEGIN
-  -- Allow NULL agreement_id if the column is nullable
-  IF NEW.agreement_id IS NULL THEN
-    RETURN NEW;
+  IF NEW.agreement_id IS NOT NULL THEN
+    IF NOT EXISTS (
+      SELECT 1
+      FROM agreements
+      WHERE agreements.id = NEW.agreement_id
+        AND agreements.signature_status = 'signed'
+    ) THEN
+      RAISE EXCEPTION 'Invoice requires a signed agreement (agreement_id=%)', NEW.agreement_id
+        USING ERRCODE = '23514'; -- check_violation
+    END IF;
   END IF;
-  
-  -- Check if agreement exists and get its signature_status
-  SELECT signature_status INTO v_signature_status
-  FROM agreements 
-  WHERE id = NEW.agreement_id;
-  
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'Agreement with id % does not exist', NEW.agreement_id;
-  END IF;
-  
-  -- Check if agreement is signed
-  IF v_signature_status != 'signed' THEN
-    RAISE EXCEPTION 'Invoice requires a signed agreement (agreement % has signature_status ''%'' instead of ''signed'')', 
-      NEW.agreement_id, 
-      v_signature_status;
-  END IF;
-  
+
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER enforce_agreement_signed
-  BEFORE INSERT OR UPDATE OF agreement_id ON invoices
-  FOR EACH ROW
-  EXECUTE FUNCTION check_agreement_signed();
+CREATE TRIGGER trg_validate_invoice_agreement_signed
+BEFORE INSERT OR UPDATE ON invoices
+FOR EACH ROW
+EXECUTE FUNCTION validate_invoice_agreement_signed();
 ```
 
 ### Rule 3: Invoice Payment Reconciliation
@@ -557,15 +512,15 @@ BEGIN
   IF NEW.status = 'succeeded' THEN
     UPDATE invoices
     SET 
-      amount_paid = amount_paid + NEW.amount,
+      amount_paid = invoices.amount_paid + NEW.amount,
       status = CASE
-        WHEN amount_paid + NEW.amount >= total_amount THEN 'paid'
-        WHEN amount_paid + NEW.amount > 0 THEN 'partially_paid'
-        ELSE status
+        WHEN invoices.amount_paid + NEW.amount >= invoices.total_amount THEN 'paid'
+        WHEN invoices.amount_paid + NEW.amount > 0 THEN 'partially_paid'
+        ELSE invoices.status
       END,
       paid_at = CASE
-        WHEN amount_paid + NEW.amount >= total_amount THEN NOW()
-        ELSE paid_at
+        WHEN invoices.amount_paid + NEW.amount >= invoices.total_amount THEN NOW()
+        ELSE invoices.paid_at
       END,
       updated_at = NOW()
     WHERE id = NEW.invoice_id;
@@ -716,7 +671,7 @@ Response 409:
 ### Application
 - Horizontal scaling (stateless)
 - Background job processing (Sidekiq, Bull)
-- Redis for idempotency cache
+- Redis as a read-through/write-through cache in front of the `idempotency_keys` table for idempotency checks (fall back to direct DB access if Redis is unavailable)
 - Message queue for events (RabbitMQ, SQS)
 
 ### Monitoring
