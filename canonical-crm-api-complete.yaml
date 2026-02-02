@@ -109,7 +109,9 @@ components:
           example: "Cannot send proposal in draft status"
         details:
           type: object
-          description: Additional context about the error
+          description: >
+            Additional context about the error. Structure varies by error code.
+            For INVALID_STATE_TRANSITION, includes current_status, required_status, and allowed_transitions array.
           additionalProperties: true
 
     ListResponse:
@@ -342,6 +344,10 @@ components:
             draft → sent → viewed → accepted (terminal)
             sent → expired (terminal)
             viewed → rejected (terminal)
+
+            The transition from `sent` to `expired` is performed by an out-of-band
+            scheduler/background job (for example, after 30 days without acceptance)
+            and is not exposed as a dedicated API endpoint in this specification.
         sent_at:
           type: string
           format: date-time
@@ -438,6 +444,14 @@ components:
             draft → sent → partially_paid → paid (terminal)
             sent → overdue → paid (terminal)
             draft|sent → void (terminal)
+
+            Notes:
+            - "overdue" is an auto-transition state derived from "sent" when due_date has
+              passed and the invoice is not fully paid.
+            - When payment reconciliation increases amount_paid to be greater than or
+              equal to total_amount, the invoice MUST transition to "paid" from any
+              non-terminal state (including "sent", "partially_paid", and "overdue"),
+              and the "overdue" status is cleared.
         sent_at:
           type: string
           format: date-time
@@ -533,10 +547,16 @@ components:
     MutationResponse:
       type: object
       required: [object, event]
+      description: >
+        Standard response wrapper for state-changing operations.
+        The 'object' property structure varies by endpoint and is specified using allOf
+        to combine this base schema with the specific resource schema (Contact, Inquiry, etc.).
       properties:
         object:
           type: object
-          description: Updated canonical state
+          description: >
+            Updated canonical state of the resource.
+            Actual schema is specified per-endpoint using allOf composition.
         event:
           $ref: '#/components/schemas/ActivityEvent'
           description: Activity event emitted for this mutation
@@ -761,6 +781,11 @@ paths:
         Update inquiry status. Valid transitions:
         new → in_review, new → rejected,
         in_review → converted, in_review → rejected
+        
+        Note: Transition to 'converted' status is handled by the /inquiries/{id}/convert
+        endpoint which also creates the associated opportunity. Manual rejection can be
+        done via PATCH for simplicity, but conversion requires the dedicated endpoint
+        due to its side effects.
       parameters:
         - name: id
           in: path
@@ -1097,6 +1122,10 @@ paths:
       summary: Update meeting status
       operationId: updateMeeting
       tags: [Meetings]
+      description: >
+        Update meeting details. Note: rescheduling (updating scheduled_start/scheduled_end)
+        should be validated to prevent updates once the meeting status is in a terminal state
+        (completed, canceled, no_show).
       parameters:
         - name: id
           in: path
@@ -1539,9 +1568,14 @@ paths:
       summary: Stripe webhook receiver
       operationId: handleStripeWebhook
       tags: [Payments]
+      security: []
       description: >
         Receives Stripe payment events.
         Creates payment record and updates invoice status.
+        
+        Note: This endpoint should use Stripe signature validation (Stripe-Signature header)
+        instead of bearer token authentication. The security requirement is explicitly set to
+        empty to exclude this endpoint from the global bearerAuth requirement.
       requestBody:
         required: true
         content:

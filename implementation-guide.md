@@ -671,7 +671,7 @@ Response 409:
 ### Application
 - Horizontal scaling (stateless)
 - Background job processing (Sidekiq, Bull)
-- Redis for idempotency cache
+- Redis as a read-through/write-through cache in front of the `idempotency_keys` table for idempotency checks (fall back to direct DB access if Redis is unavailable)
 - Message queue for events (RabbitMQ, SQS)
 
 ### Monitoring
