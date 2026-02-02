@@ -12,10 +12,12 @@ A **multi-tenant VA CRM monorepo** built with modern technologies to manage the 
 
 - **Monorepo**: Turborepo
 - **Backend**: NestJS + PostgreSQL + Prisma ORM + Redis
-- **Frontend**: Next.js 14 (App Router) + React + TailwindCSS
-- **Authentication**: Clerk
+- **Frontend**: Next.js 15.2+ (App Router) + React 19 + TailwindCSS
+- **Authentication**: Clerk (v6+)
 - **State Management**: TanStack Query (React Query)
 - **Infrastructure**: Docker Compose
+
+> **Security Note**: This project uses Next.js 15.2.3+ which includes critical security patches for DoS vulnerabilities, authorization bypass, and SSRF issues. Always keep dependencies updated.
 
 ## 📁 Project Structure
 
