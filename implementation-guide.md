@@ -474,12 +474,23 @@ async function sendProposal(
 CREATE OR REPLACE FUNCTION check_proposal_accepted()
 RETURNS TRIGGER AS $$
 BEGIN
+  -- Allow NULL proposal_id if the column is nullable
+  IF NEW.proposal_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+  
+  -- Check if proposal exists
+  IF NOT EXISTS (SELECT 1 FROM proposals WHERE id = NEW.proposal_id) THEN
+    RAISE EXCEPTION 'Proposal with id % does not exist', NEW.proposal_id;
+  END IF;
+  
+  -- Check if proposal is accepted
   IF NOT EXISTS (
     SELECT 1 FROM proposals 
-    WHERE proposals.id = NEW.proposal_id 
-    AND proposals.status = 'accepted'
+    WHERE id = NEW.proposal_id 
+    AND status = 'accepted'
   ) THEN
-    RAISE EXCEPTION 'Agreement requires an accepted proposal';
+    RAISE EXCEPTION 'Agreement requires an accepted proposal (proposal % has status other than accepted)', NEW.proposal_id;
   END IF;
   
   RETURN NEW;
@@ -500,12 +511,23 @@ CREATE TRIGGER enforce_proposal_accepted
 CREATE OR REPLACE FUNCTION check_agreement_signed()
 RETURNS TRIGGER AS $$
 BEGIN
+  -- Allow NULL agreement_id if the column is nullable
+  IF NEW.agreement_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+  
+  -- Check if agreement exists
+  IF NOT EXISTS (SELECT 1 FROM agreements WHERE id = NEW.agreement_id) THEN
+    RAISE EXCEPTION 'Agreement with id % does not exist', NEW.agreement_id;
+  END IF;
+  
+  -- Check if agreement is signed
   IF NOT EXISTS (
     SELECT 1 FROM agreements 
-    WHERE agreements.id = NEW.agreement_id 
-    AND agreements.signature_status = 'signed'
+    WHERE id = NEW.agreement_id 
+    AND signature_status = 'signed'
   ) THEN
-    RAISE EXCEPTION 'Invoice requires a signed agreement';
+    RAISE EXCEPTION 'Invoice requires a signed agreement (agreement % has signature_status other than signed)', NEW.agreement_id;
   END IF;
   
   RETURN NEW;
