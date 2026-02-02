@@ -1573,9 +1573,11 @@ paths:
         Receives Stripe payment events.
         Creates payment record and updates invoice status.
         
-        Note: This endpoint should use Stripe signature validation (Stripe-Signature header)
-        instead of bearer token authentication. The security requirement is explicitly set to
-        empty to exclude this endpoint from the global bearerAuth requirement.
+        Note: This endpoint should use Stripe signature validation instead of bearer token
+        authentication. The security requirement is explicitly set to empty to exclude this
+        endpoint from the global bearerAuth requirement. Implementations must validate the
+        Stripe-Signature header using the Stripe webhook secret to verify authenticity.
+        See: https://stripe.com/docs/webhooks/signatures
       requestBody:
         required: true
         content:

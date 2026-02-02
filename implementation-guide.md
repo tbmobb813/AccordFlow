@@ -461,7 +461,7 @@ BEGIN
     WHERE proposals.id = NEW.proposal_id
       AND proposals.status = 'accepted'
   ) THEN
-    RAISE EXCEPTION 'Agreement % requires an accepted proposal (proposal_id=%)', NEW.id, NEW.proposal_id
+    RAISE EXCEPTION 'Agreement requires an accepted proposal (proposal_id=%)', NEW.proposal_id
       USING ERRCODE = '23514'; -- check_violation
   END IF;
 
@@ -488,7 +488,7 @@ BEGIN
       WHERE agreements.id = NEW.agreement_id
         AND agreements.signature_status = 'signed'
     ) THEN
-      RAISE EXCEPTION 'Invoice % requires a signed agreement (agreement_id=%)', NEW.id, NEW.agreement_id
+      RAISE EXCEPTION 'Invoice requires a signed agreement (agreement_id=%)', NEW.agreement_id
         USING ERRCODE = '23514'; -- check_violation
     END IF;
   END IF;
