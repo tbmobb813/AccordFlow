@@ -469,29 +469,83 @@ async function sendProposal(
 ### Rule 1: Proposal → Agreement Requirement
 ```sql
 -- Constraint: Agreement requires accepted proposal
-ALTER TABLE agreements
-  ADD CONSTRAINT chk_proposal_accepted
-  CHECK (
-    NOT EXISTS (
-      SELECT 1 FROM proposals 
-      WHERE proposals.id = agreements.proposal_id 
-      AND proposals.status != 'accepted'
-    )
-  );
+-- Note: PostgreSQL does not support subqueries in CHECK constraints,
+-- so we use a trigger instead
+CREATE OR REPLACE FUNCTION check_proposal_accepted()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_proposal_status TEXT;
+BEGIN
+  -- Allow NULL proposal_id if the column is nullable
+  IF NEW.proposal_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+  
+  -- Check if proposal exists and get its status
+  SELECT status INTO v_proposal_status
+  FROM proposals 
+  WHERE id = NEW.proposal_id;
+  
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Proposal with id % does not exist', NEW.proposal_id;
+  END IF;
+  
+  -- Check if proposal is accepted
+  IF v_proposal_status != 'accepted' THEN
+    RAISE EXCEPTION 'Agreement requires an accepted proposal (proposal % has status ''%'' instead of ''accepted'')', 
+      NEW.proposal_id, 
+      v_proposal_status;
+  END IF;
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER enforce_proposal_accepted
+  BEFORE INSERT OR UPDATE OF proposal_id ON agreements
+  FOR EACH ROW
+  EXECUTE FUNCTION check_proposal_accepted();
 ```
 
 ### Rule 2: Agreement → Invoice Requirement
 ```sql
 -- Constraint: Invoice requires signed agreement
-ALTER TABLE invoices
-  ADD CONSTRAINT chk_agreement_signed
-  CHECK (
-    NOT EXISTS (
-      SELECT 1 FROM agreements 
-      WHERE agreements.id = invoices.agreement_id 
-      AND agreements.signature_status != 'signed'
-    )
-  );
+-- Note: PostgreSQL does not support subqueries in CHECK constraints,
+-- so we use a trigger instead
+CREATE OR REPLACE FUNCTION check_agreement_signed()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_signature_status TEXT;
+BEGIN
+  -- Allow NULL agreement_id if the column is nullable
+  IF NEW.agreement_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+  
+  -- Check if agreement exists and get its signature_status
+  SELECT signature_status INTO v_signature_status
+  FROM agreements 
+  WHERE id = NEW.agreement_id;
+  
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Agreement with id % does not exist', NEW.agreement_id;
+  END IF;
+  
+  -- Check if agreement is signed
+  IF v_signature_status != 'signed' THEN
+    RAISE EXCEPTION 'Invoice requires a signed agreement (agreement % has signature_status ''%'' instead of ''signed'')', 
+      NEW.agreement_id, 
+      v_signature_status;
+  END IF;
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER enforce_agreement_signed
+  BEFORE INSERT OR UPDATE OF agreement_id ON invoices
+  FOR EACH ROW
+  EXECUTE FUNCTION check_agreement_signed();
 ```
 
 ### Rule 3: Invoice Payment Reconciliation
