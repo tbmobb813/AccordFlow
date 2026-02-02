@@ -4,6 +4,8 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: accordflow-postgres
+    # WARNING: These are development-only credentials
+    # NEVER use these in production! Change them immediately for any deployment.
     environment:
       POSTGRES_USER: accordflow
       POSTGRES_PASSWORD: accordflow_dev_pass

@@ -1,3 +1,5 @@
+'use client';
+
 import axios from 'axios';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -10,18 +12,23 @@ export const api = axios.create({
 });
 
 // Add request interceptor to include auth token and tenant
+// Note: This should be called from client components with useAuth() from Clerk
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('clerk-token');
   const tenantSlug = localStorage.getItem('tenant-slug') || 'demo-company';
-
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-
   config.headers['x-tenant-slug'] = tenantSlug;
-
+  
+  // Token should be set per-request using setAuthToken helper
   return config;
 });
+
+// Helper function to set auth token (call from client components with useAuth())
+export const setAuthToken = (token: string | null) => {
+  if (token) {
+    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+  } else {
+    delete api.defaults.headers.common['Authorization'];
+  }
+};
 
 // API client functions
 export const contactsApi = {

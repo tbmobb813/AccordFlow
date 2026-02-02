@@ -1,5 +1,6 @@
 import { IsString, IsEmail, IsOptional, IsEnum } from 'class-validator';
 import { ApiProperty, PartialType } from '@nestjs/swagger';
+import { ContactStatus } from '@accordflow/database';
 
 export class CreateContactDto {
   @ApiProperty()
@@ -24,10 +25,10 @@ export class CreateContactDto {
   @IsString()
   company?: string;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ required: false, enum: ContactStatus })
   @IsOptional()
-  @IsEnum(['ACTIVE', 'INACTIVE', 'QUALIFIED', 'UNQUALIFIED'])
-  status?: string;
+  @IsEnum(ContactStatus)
+  status?: ContactStatus;
 
   @ApiProperty({ required: false })
   @IsOptional()

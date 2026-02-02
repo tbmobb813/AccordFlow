@@ -7,25 +7,27 @@ export class ProposalsService {
   constructor(private prisma: PrismaService) {}
 
   async create(tenantId: string, userId: string, createProposalDto: CreateProposalDto) {
-    const proposal = await this.prisma.proposal.create({
-      data: {
-        ...createProposalDto,
-        tenantId,
-      },
-    });
+    return this.prisma.$transaction(async (tx) => {
+      const proposal = await tx.proposal.create({
+        data: {
+          ...createProposalDto,
+          tenantId,
+        },
+      });
 
-    await this.prisma.activity.create({
-      data: {
-        tenantId,
-        userId,
-        entityType: 'PROPOSAL',
-        entityId: proposal.id,
-        action: 'CREATED',
-        metadata: { title: proposal.title, status: proposal.status },
-      },
-    });
+      await tx.activity.create({
+        data: {
+          tenantId,
+          userId,
+          entityType: 'PROPOSAL',
+          entityId: proposal.id,
+          action: 'CREATED',
+          metadata: { title: proposal.title, status: proposal.status },
+        },
+      });
 
-    return proposal;
+      return proposal;
+    });
   }
 
   async findAll(tenantId: string) {
@@ -44,41 +46,61 @@ export class ProposalsService {
   }
 
   async update(tenantId: string, userId: string, id: string, updateProposalDto: UpdateProposalDto) {
-    const proposal = await this.prisma.proposal.update({
-      where: { id, tenantId },
-      data: updateProposalDto,
-    });
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.proposal.findFirst({
+        where: { id, tenantId },
+      });
 
-    await this.prisma.activity.create({
-      data: {
-        tenantId,
-        userId,
-        entityType: 'PROPOSAL',
-        entityId: proposal.id,
-        action: 'UPDATED',
-        metadata: updateProposalDto,
-      },
-    });
+      if (!existing) {
+        throw new Error('Proposal not found');
+      }
 
-    return proposal;
+      const proposal = await tx.proposal.update({
+        where: { id },
+        data: updateProposalDto,
+      });
+
+      await tx.activity.create({
+        data: {
+          tenantId,
+          userId,
+          entityType: 'PROPOSAL',
+          entityId: proposal.id,
+          action: 'UPDATED',
+          metadata: updateProposalDto,
+        },
+      });
+
+      return proposal;
+    });
   }
 
   async remove(tenantId: string, userId: string, id: string) {
-    const proposal = await this.prisma.proposal.delete({
-      where: { id, tenantId },
-    });
+    return this.prisma.$transaction(async (tx) => {
+      const proposal = await tx.proposal.findFirst({
+        where: { id, tenantId },
+      });
 
-    await this.prisma.activity.create({
-      data: {
-        tenantId,
-        userId,
-        entityType: 'PROPOSAL',
-        entityId: proposal.id,
-        action: 'DELETED',
-        metadata: { title: proposal.title },
-      },
-    });
+      if (!proposal) {
+        throw new Error('Proposal not found');
+      }
 
-    return proposal;
+      await tx.activity.create({
+        data: {
+          tenantId,
+          userId,
+          entityType: 'PROPOSAL',
+          entityId: proposal.id,
+          action: 'DELETED',
+          metadata: { title: proposal.title },
+        },
+      });
+
+      await tx.proposal.delete({
+        where: { id },
+      });
+
+      return proposal;
+    });
   }
 }

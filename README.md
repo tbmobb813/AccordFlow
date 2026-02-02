@@ -310,7 +310,7 @@ NestJS API with:
 - Swagger documentation
 
 ### @accordflow/web
-Next.js 14 frontend with:
+Next.js 15.2+ frontend with:
 - App Router
 - Server/Client components
 - TailwindCSS styling

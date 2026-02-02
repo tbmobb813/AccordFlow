@@ -7,25 +7,36 @@ export class OpportunitiesService {
   constructor(private prisma: PrismaService) {}
 
   async create(tenantId: string, userId: string, createOpportunityDto: CreateOpportunityDto) {
-    const opportunity = await this.prisma.opportunity.create({
-      data: {
-        ...createOpportunityDto,
-        tenantId,
-      },
-    });
+    return this.prisma.$transaction(async (tx) => {
+      // Verify the contact exists and belongs to the tenant
+      const contact = await tx.contact.findFirst({
+        where: { id: createOpportunityDto.contactId, tenantId },
+      });
 
-    await this.prisma.activity.create({
-      data: {
-        tenantId,
-        userId,
-        entityType: 'OPPORTUNITY',
-        entityId: opportunity.id,
-        action: 'CREATED',
-        metadata: { title: opportunity.title, stage: opportunity.stage },
-      },
-    });
+      if (!contact) {
+        throw new Error('Contact not found or does not belong to this tenant');
+      }
 
-    return opportunity;
+      const opportunity = await tx.opportunity.create({
+        data: {
+          ...createOpportunityDto,
+          tenantId,
+        },
+      });
+
+      await tx.activity.create({
+        data: {
+          tenantId,
+          userId,
+          entityType: 'OPPORTUNITY',
+          entityId: opportunity.id,
+          action: 'CREATED',
+          metadata: { title: opportunity.title, stage: opportunity.stage },
+        },
+      });
+
+      return opportunity;
+    });
   }
 
   async findAll(tenantId: string) {
@@ -49,41 +60,72 @@ export class OpportunitiesService {
     id: string,
     updateOpportunityDto: UpdateOpportunityDto,
   ) {
-    const opportunity = await this.prisma.opportunity.update({
-      where: { id, tenantId },
-      data: updateOpportunityDto,
-    });
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.opportunity.findFirst({
+        where: { id, tenantId },
+      });
 
-    await this.prisma.activity.create({
-      data: {
-        tenantId,
-        userId,
-        entityType: 'OPPORTUNITY',
-        entityId: opportunity.id,
-        action: 'UPDATED',
-        metadata: updateOpportunityDto,
-      },
-    });
+      if (!existing) {
+        throw new Error('Opportunity not found');
+      }
 
-    return opportunity;
+      // If contactId is being updated, verify it belongs to the tenant
+      if (updateOpportunityDto.contactId) {
+        const contact = await tx.contact.findFirst({
+          where: { id: updateOpportunityDto.contactId, tenantId },
+        });
+
+        if (!contact) {
+          throw new Error('Contact not found or does not belong to this tenant');
+        }
+      }
+
+      const opportunity = await tx.opportunity.update({
+        where: { id },
+        data: updateOpportunityDto,
+      });
+
+      await tx.activity.create({
+        data: {
+          tenantId,
+          userId,
+          entityType: 'OPPORTUNITY',
+          entityId: opportunity.id,
+          action: 'UPDATED',
+          metadata: updateOpportunityDto,
+        },
+      });
+
+      return opportunity;
+    });
   }
 
   async remove(tenantId: string, userId: string, id: string) {
-    const opportunity = await this.prisma.opportunity.delete({
-      where: { id, tenantId },
-    });
+    return this.prisma.$transaction(async (tx) => {
+      const opportunity = await tx.opportunity.findFirst({
+        where: { id, tenantId },
+      });
 
-    await this.prisma.activity.create({
-      data: {
-        tenantId,
-        userId,
-        entityType: 'OPPORTUNITY',
-        entityId: opportunity.id,
-        action: 'DELETED',
-        metadata: { title: opportunity.title },
-      },
-    });
+      if (!opportunity) {
+        throw new Error('Opportunity not found');
+      }
 
-    return opportunity;
+      await tx.activity.create({
+        data: {
+          tenantId,
+          userId,
+          entityType: 'OPPORTUNITY',
+          entityId: opportunity.id,
+          action: 'DELETED',
+          metadata: { title: opportunity.title },
+        },
+      });
+
+      await tx.opportunity.delete({
+        where: { id },
+      });
+
+      return opportunity;
+    });
   }
 }

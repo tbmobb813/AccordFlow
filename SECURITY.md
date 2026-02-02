@@ -210,4 +210,4 @@ This security policy is part of the AccordFlow project and is licensed under the
 
 ---
 
-Last Updated: 2024-02-02
+Last Updated: February 2026

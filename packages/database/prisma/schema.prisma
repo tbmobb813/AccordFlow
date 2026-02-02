@@ -82,7 +82,6 @@ model Contact {
   // Relations
   tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   opportunities Opportunity[]
-  activities    Activity[]
 
   @@index([tenantId])
   @@index([email])
@@ -113,7 +112,6 @@ model Opportunity {
   tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   contact    Contact    @relation(fields: [contactId], references: [id], onDelete: Cascade)
   proposals  Proposal[]
-  activities Activity[]
 
   @@index([tenantId])
   @@index([contactId])
@@ -146,7 +144,6 @@ model Proposal {
   tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
   agreements  Agreement[]
-  activities  Activity[]
 
   @@index([tenantId])
   @@index([opportunityId])
@@ -179,7 +176,6 @@ model Agreement {
   tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   proposal   Proposal   @relation(fields: [proposalId], references: [id], onDelete: Cascade)
   invoices   Invoice[]
-  activities Activity[]
 
   @@index([tenantId])
   @@index([proposalId])
@@ -199,7 +195,7 @@ model Invoice {
   id          String        @id @default(cuid())
   tenantId    String
   agreementId String
-  invoiceNumber String      @unique
+  invoiceNumber String
   amount      Decimal       @db.Decimal(10, 2)
   status      InvoiceStatus @default(DRAFT)
   dueDate     DateTime
@@ -212,11 +208,10 @@ model Invoice {
   tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   agreement  Agreement  @relation(fields: [agreementId], references: [id], onDelete: Cascade)
   payments   Payment[]
-  activities Activity[]
 
+  @@unique([tenantId, invoiceNumber])
   @@index([tenantId])
   @@index([agreementId])
-  @@index([invoiceNumber])
   @@map("invoices")
 }
 
@@ -245,7 +240,6 @@ model Payment {
   // Relations
   tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   invoice    Invoice    @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  activities Activity[]
 
   @@index([tenantId])
   @@index([invoiceId])
@@ -277,14 +271,6 @@ model Activity {
   // Relations
   tenant        Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user          User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
-  
-  // Polymorphic relations (stored as entityId + entityType)
-  contact       Contact?     @relation(fields: [entityId], references: [id], onDelete: Cascade, map: "activity_contact_fk")
-  opportunity   Opportunity? @relation(fields: [entityId], references: [id], onDelete: Cascade, map: "activity_opportunity_fk")
-  proposal      Proposal?    @relation(fields: [entityId], references: [id], onDelete: Cascade, map: "activity_proposal_fk")
-  agreement     Agreement?   @relation(fields: [entityId], references: [id], onDelete: Cascade, map: "activity_agreement_fk")
-  invoice       Invoice?     @relation(fields: [entityId], references: [id], onDelete: Cascade, map: "activity_invoice_fk")
-  payment       Payment?     @relation(fields: [entityId], references: [id], onDelete: Cascade, map: "activity_payment_fk")
 
   @@index([tenantId])
   @@index([entityType, entityId])

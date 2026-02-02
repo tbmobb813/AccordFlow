@@ -27,16 +27,15 @@ export class ClerkAuthGuard implements CanActivate {
     const token = authHeader.substring(7);
 
     try {
-      const session = await clerkClient.sessions.verifySession(
-        request.headers['x-clerk-session-id'] || '',
-        token,
-      );
+      // Verify the JWT token directly
+      const payload = await clerkClient.verifyToken(token);
 
-      if (!session) {
-        throw new UnauthorizedException('Invalid session');
+      if (!payload || !payload.sub) {
+        throw new UnauthorizedException('Invalid token');
       }
 
-      const user = await clerkClient.users.getUser(session.userId);
+      // Get user details
+      const user = await clerkClient.users.getUser(payload.sub);
       request.clerkUser = user;
       request.clerkUserId = user.id;
 

@@ -7,30 +7,32 @@ export class ContactsService {
   constructor(private prisma: PrismaService) {}
 
   async create(tenantId: string, userId: string, createContactDto: CreateContactDto) {
-    const contact = await this.prisma.contact.create({
-      data: {
-        ...createContactDto,
-        tenantId,
-      },
-    });
-
-    // Log activity
-    await this.prisma.activity.create({
-      data: {
-        tenantId,
-        userId,
-        entityType: 'CONTACT',
-        entityId: contact.id,
-        action: 'CREATED',
-        metadata: {
-          firstName: contact.firstName,
-          lastName: contact.lastName,
-          email: contact.email,
+    return this.prisma.$transaction(async (tx) => {
+      const contact = await tx.contact.create({
+        data: {
+          ...createContactDto,
+          tenantId,
         },
-      },
-    });
+      });
 
-    return contact;
+      // Log activity
+      await tx.activity.create({
+        data: {
+          tenantId,
+          userId,
+          entityType: 'CONTACT',
+          entityId: contact.id,
+          action: 'CREATED',
+          metadata: {
+            firstName: contact.firstName,
+            lastName: contact.lastName,
+            email: contact.email,
+          },
+        },
+      });
+
+      return contact;
+    });
   }
 
   async findAll(tenantId: string) {
@@ -50,46 +52,69 @@ export class ContactsService {
   }
 
   async update(tenantId: string, userId: string, id: string, updateContactDto: UpdateContactDto) {
-    const contact = await this.prisma.contact.update({
-      where: { id, tenantId },
-      data: updateContactDto,
-    });
+    return this.prisma.$transaction(async (tx) => {
+      // Verify the contact belongs to the tenant
+      const existing = await tx.contact.findFirst({
+        where: { id, tenantId },
+      });
 
-    // Log activity
-    await this.prisma.activity.create({
-      data: {
-        tenantId,
-        userId,
-        entityType: 'CONTACT',
-        entityId: contact.id,
-        action: 'UPDATED',
-        metadata: updateContactDto,
-      },
-    });
+      if (!existing) {
+        throw new Error('Contact not found');
+      }
 
-    return contact;
+      const contact = await tx.contact.update({
+        where: { id },
+        data: updateContactDto,
+      });
+
+      // Log activity
+      await tx.activity.create({
+        data: {
+          tenantId,
+          userId,
+          entityType: 'CONTACT',
+          entityId: contact.id,
+          action: 'UPDATED',
+          metadata: updateContactDto,
+        },
+      });
+
+      return contact;
+    });
   }
 
   async remove(tenantId: string, userId: string, id: string) {
-    const contact = await this.prisma.contact.delete({
-      where: { id, tenantId },
-    });
+    return this.prisma.$transaction(async (tx) => {
+      // Fetch the contact first so we can log the deletion before actually deleting it
+      const contact = await tx.contact.findFirst({
+        where: { id, tenantId },
+      });
 
-    // Log activity
-    await this.prisma.activity.create({
-      data: {
-        tenantId,
-        userId,
-        entityType: 'CONTACT',
-        entityId: contact.id,
-        action: 'DELETED',
-        metadata: {
-          firstName: contact.firstName,
-          lastName: contact.lastName,
+      if (!contact) {
+        throw new Error('Contact not found');
+      }
+
+      // Log activity before deletion to avoid foreign key constraint issues
+      await tx.activity.create({
+        data: {
+          tenantId,
+          userId,
+          entityType: 'CONTACT',
+          entityId: contact.id,
+          action: 'DELETED',
+          metadata: {
+            firstName: contact.firstName,
+            lastName: contact.lastName,
+          },
         },
-      },
-    });
+      });
 
-    return contact;
+      // Delete the contact
+      await tx.contact.delete({
+        where: { id },
+      });
+
+      return contact;
+    });
   }
 }

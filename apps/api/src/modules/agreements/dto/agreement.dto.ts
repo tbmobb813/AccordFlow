@@ -1,5 +1,6 @@
 import { IsString, IsOptional, IsEnum, IsDateString } from 'class-validator';
 import { ApiProperty, PartialType } from '@nestjs/swagger';
+import { AgreementStatus } from '@accordflow/database';
 
 export class CreateAgreementDto {
   @ApiProperty()
@@ -15,10 +16,10 @@ export class CreateAgreementDto {
   @IsString()
   content?: string;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ required: false, enum: AgreementStatus })
   @IsOptional()
-  @IsEnum(['DRAFT', 'PENDING_SIGNATURE', 'SIGNED', 'ACTIVE', 'EXPIRED', 'TERMINATED'])
-  status?: string;
+  @IsEnum(AgreementStatus)
+  status?: AgreementStatus;
 
   @ApiProperty({ required: false })
   @IsOptional()

@@ -7,25 +7,27 @@ export class PaymentsService {
   constructor(private prisma: PrismaService) {}
 
   async create(tenantId: string, userId: string, createPaymentDto: CreatePaymentDto) {
-    const payment = await this.prisma.payment.create({
-      data: {
-        ...createPaymentDto,
-        tenantId,
-      },
-    });
+    return this.prisma.$transaction(async (tx) => {
+      const payment = await tx.payment.create({
+        data: {
+          ...createPaymentDto,
+          tenantId,
+        },
+      });
 
-    await this.prisma.activity.create({
-      data: {
-        tenantId,
-        userId,
-        entityType: 'PAYMENT',
-        entityId: payment.id,
-        action: 'CREATED',
-        metadata: { amount: payment.amount.toString(), status: payment.status },
-      },
-    });
+      await tx.activity.create({
+        data: {
+          tenantId,
+          userId,
+          entityType: 'PAYMENT',
+          entityId: payment.id,
+          action: 'CREATED',
+          metadata: { amount: payment.amount.toString(), status: payment.status },
+        },
+      });
 
-    return payment;
+      return payment;
+    });
   }
 
   async findAll(tenantId: string) {
@@ -44,41 +46,61 @@ export class PaymentsService {
   }
 
   async update(tenantId: string, userId: string, id: string, updatePaymentDto: UpdatePaymentDto) {
-    const payment = await this.prisma.payment.update({
-      where: { id, tenantId },
-      data: updatePaymentDto,
-    });
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.payment.findFirst({
+        where: { id, tenantId },
+      });
 
-    await this.prisma.activity.create({
-      data: {
-        tenantId,
-        userId,
-        entityType: 'PAYMENT',
-        entityId: payment.id,
-        action: 'UPDATED',
-        metadata: updatePaymentDto,
-      },
-    });
+      if (!existing) {
+        throw new Error('Payment not found');
+      }
 
-    return payment;
+      const payment = await tx.payment.update({
+        where: { id },
+        data: updatePaymentDto,
+      });
+
+      await tx.activity.create({
+        data: {
+          tenantId,
+          userId,
+          entityType: 'PAYMENT',
+          entityId: payment.id,
+          action: 'UPDATED',
+          metadata: updatePaymentDto,
+        },
+      });
+
+      return payment;
+    });
   }
 
   async remove(tenantId: string, userId: string, id: string) {
-    const payment = await this.prisma.payment.delete({
-      where: { id, tenantId },
-    });
+    return this.prisma.$transaction(async (tx) => {
+      const payment = await tx.payment.findFirst({
+        where: { id, tenantId },
+      });
 
-    await this.prisma.activity.create({
-      data: {
-        tenantId,
-        userId,
-        entityType: 'PAYMENT',
-        entityId: payment.id,
-        action: 'DELETED',
-        metadata: { amount: payment.amount.toString() },
-      },
-    });
+      if (!payment) {
+        throw new Error('Payment not found');
+      }
 
-    return payment;
+      await tx.activity.create({
+        data: {
+          tenantId,
+          userId,
+          entityType: 'PAYMENT',
+          entityId: payment.id,
+          action: 'DELETED',
+          metadata: { amount: payment.amount.toString() },
+        },
+      });
+
+      await tx.payment.delete({
+        where: { id },
+      });
+
+      return payment;
+    });
   }
 }

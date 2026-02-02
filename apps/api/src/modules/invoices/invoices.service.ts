@@ -7,25 +7,27 @@ export class InvoicesService {
   constructor(private prisma: PrismaService) {}
 
   async create(tenantId: string, userId: string, createInvoiceDto: CreateInvoiceDto) {
-    const invoice = await this.prisma.invoice.create({
-      data: {
-        ...createInvoiceDto,
-        tenantId,
-      },
-    });
+    return this.prisma.$transaction(async (tx) => {
+      const invoice = await tx.invoice.create({
+        data: {
+          ...createInvoiceDto,
+          tenantId,
+        },
+      });
 
-    await this.prisma.activity.create({
-      data: {
-        tenantId,
-        userId,
-        entityType: 'INVOICE',
-        entityId: invoice.id,
-        action: 'CREATED',
-        metadata: { invoiceNumber: invoice.invoiceNumber, amount: invoice.amount.toString() },
-      },
-    });
+      await tx.activity.create({
+        data: {
+          tenantId,
+          userId,
+          entityType: 'INVOICE',
+          entityId: invoice.id,
+          action: 'CREATED',
+          metadata: { invoiceNumber: invoice.invoiceNumber, amount: invoice.amount.toString() },
+        },
+      });
 
-    return invoice;
+      return invoice;
+    });
   }
 
   async findAll(tenantId: string) {
@@ -44,41 +46,61 @@ export class InvoicesService {
   }
 
   async update(tenantId: string, userId: string, id: string, updateInvoiceDto: UpdateInvoiceDto) {
-    const invoice = await this.prisma.invoice.update({
-      where: { id, tenantId },
-      data: updateInvoiceDto,
-    });
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.invoice.findFirst({
+        where: { id, tenantId },
+      });
 
-    await this.prisma.activity.create({
-      data: {
-        tenantId,
-        userId,
-        entityType: 'INVOICE',
-        entityId: invoice.id,
-        action: 'UPDATED',
-        metadata: updateInvoiceDto,
-      },
-    });
+      if (!existing) {
+        throw new Error('Invoice not found');
+      }
 
-    return invoice;
+      const invoice = await tx.invoice.update({
+        where: { id },
+        data: updateInvoiceDto,
+      });
+
+      await tx.activity.create({
+        data: {
+          tenantId,
+          userId,
+          entityType: 'INVOICE',
+          entityId: invoice.id,
+          action: 'UPDATED',
+          metadata: updateInvoiceDto,
+        },
+      });
+
+      return invoice;
+    });
   }
 
   async remove(tenantId: string, userId: string, id: string) {
-    const invoice = await this.prisma.invoice.delete({
-      where: { id, tenantId },
-    });
+    return this.prisma.$transaction(async (tx) => {
+      const invoice = await tx.invoice.findFirst({
+        where: { id, tenantId },
+      });
 
-    await this.prisma.activity.create({
-      data: {
-        tenantId,
-        userId,
-        entityType: 'INVOICE',
-        entityId: invoice.id,
-        action: 'DELETED',
-        metadata: { invoiceNumber: invoice.invoiceNumber },
-      },
-    });
+      if (!invoice) {
+        throw new Error('Invoice not found');
+      }
 
-    return invoice;
+      await tx.activity.create({
+        data: {
+          tenantId,
+          userId,
+          entityType: 'INVOICE',
+          entityId: invoice.id,
+          action: 'DELETED',
+          metadata: { invoiceNumber: invoice.invoiceNumber },
+        },
+      });
+
+      await tx.invoice.delete({
+        where: { id },
+      });
+
+      return invoice;
+    });
   }
 }

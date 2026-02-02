@@ -7,25 +7,27 @@ export class AgreementsService {
   constructor(private prisma: PrismaService) {}
 
   async create(tenantId: string, userId: string, createAgreementDto: CreateAgreementDto) {
-    const agreement = await this.prisma.agreement.create({
-      data: {
-        ...createAgreementDto,
-        tenantId,
-      },
-    });
+    return this.prisma.$transaction(async (tx) => {
+      const agreement = await tx.agreement.create({
+        data: {
+          ...createAgreementDto,
+          tenantId,
+        },
+      });
 
-    await this.prisma.activity.create({
-      data: {
-        tenantId,
-        userId,
-        entityType: 'AGREEMENT',
-        entityId: agreement.id,
-        action: 'CREATED',
-        metadata: { title: agreement.title, status: agreement.status },
-      },
-    });
+      await tx.activity.create({
+        data: {
+          tenantId,
+          userId,
+          entityType: 'AGREEMENT',
+          entityId: agreement.id,
+          action: 'CREATED',
+          metadata: { title: agreement.title, status: agreement.status },
+        },
+      });
 
-    return agreement;
+      return agreement;
+    });
   }
 
   async findAll(tenantId: string) {
@@ -44,41 +46,61 @@ export class AgreementsService {
   }
 
   async update(tenantId: string, userId: string, id: string, updateAgreementDto: UpdateAgreementDto) {
-    const agreement = await this.prisma.agreement.update({
-      where: { id, tenantId },
-      data: updateAgreementDto,
-    });
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.agreement.findFirst({
+        where: { id, tenantId },
+      });
 
-    await this.prisma.activity.create({
-      data: {
-        tenantId,
-        userId,
-        entityType: 'AGREEMENT',
-        entityId: agreement.id,
-        action: 'UPDATED',
-        metadata: updateAgreementDto,
-      },
-    });
+      if (!existing) {
+        throw new Error('Agreement not found');
+      }
 
-    return agreement;
+      const agreement = await tx.agreement.update({
+        where: { id },
+        data: updateAgreementDto,
+      });
+
+      await tx.activity.create({
+        data: {
+          tenantId,
+          userId,
+          entityType: 'AGREEMENT',
+          entityId: agreement.id,
+          action: 'UPDATED',
+          metadata: updateAgreementDto,
+        },
+      });
+
+      return agreement;
+    });
   }
 
   async remove(tenantId: string, userId: string, id: string) {
-    const agreement = await this.prisma.agreement.delete({
-      where: { id, tenantId },
-    });
+    return this.prisma.$transaction(async (tx) => {
+      const agreement = await tx.agreement.findFirst({
+        where: { id, tenantId },
+      });
 
-    await this.prisma.activity.create({
-      data: {
-        tenantId,
-        userId,
-        entityType: 'AGREEMENT',
-        entityId: agreement.id,
-        action: 'DELETED',
-        metadata: { title: agreement.title },
-      },
-    });
+      if (!agreement) {
+        throw new Error('Agreement not found');
+      }
 
-    return agreement;
+      await tx.activity.create({
+        data: {
+          tenantId,
+          userId,
+          entityType: 'AGREEMENT',
+          entityId: agreement.id,
+          action: 'DELETED',
+          metadata: { title: agreement.title },
+        },
+      });
+
+      await tx.agreement.delete({
+        where: { id },
+      });
+
+      return agreement;
+    });
   }
 }

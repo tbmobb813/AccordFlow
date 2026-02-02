@@ -1,6 +1,7 @@
 import { IsString, IsOptional, IsEnum, IsNumber, IsDateString } from 'class-validator';
 import { ApiProperty, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { OpportunityStage } from '@accordflow/database';
 
 export class CreateOpportunityDto {
   @ApiProperty()
@@ -22,17 +23,10 @@ export class CreateOpportunityDto {
   @IsNumber()
   value?: number;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ required: false, enum: OpportunityStage })
   @IsOptional()
-  @IsEnum([
-    'PROSPECTING',
-    'QUALIFICATION',
-    'PROPOSAL',
-    'NEGOTIATION',
-    'CLOSED_WON',
-    'CLOSED_LOST',
-  ])
-  stage?: string;
+  @IsEnum(OpportunityStage)
+  stage?: OpportunityStage;
 
   @ApiProperty({ required: false })
   @IsOptional()
