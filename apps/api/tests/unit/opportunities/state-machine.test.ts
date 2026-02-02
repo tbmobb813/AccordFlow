@@ -1,3 +1,1 @@
-test('state machine placeholder', () => {
-  expect(true).toBe(true);
-});
+test.todo('state machine placeholder');
