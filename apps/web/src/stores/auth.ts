@@ -1,5 +1,5 @@
 'use client'
-import create from 'zustand';
+import { create } from 'zustand';
 
 type State = { user?: { id: string; email: string }; setUser: (u?: State['user']) => void };
 

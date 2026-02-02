@@ -1,5 +1,5 @@
 'use client'
-import create from 'zustand';
+import { create } from 'zustand';
 
 type UIState = { sidebarOpen: boolean; setSidebarOpen: (v: boolean) => void };
 
