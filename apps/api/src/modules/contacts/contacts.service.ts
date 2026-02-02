@@ -75,7 +75,7 @@ export class ContactsService {
           entityType: 'CONTACT',
           entityId: contact.id,
           action: 'UPDATED',
-          metadata: updateContactDto,
+          metadata: updateContactDto as any,
         },
       });
 

@@ -9,7 +9,7 @@ export class ActivitiesService {
     return this.prisma.activity.findMany({
       where: {
         tenantId,
-        ...(entityType && { entityType }),
+        ...(entityType && { entityType: entityType as any }),
         ...(entityId && { entityId }),
       },
       include: {

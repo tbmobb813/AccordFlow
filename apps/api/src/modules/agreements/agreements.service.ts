@@ -67,7 +67,7 @@ export class AgreementsService {
           entityType: 'AGREEMENT',
           entityId: agreement.id,
           action: 'UPDATED',
-          metadata: updateAgreementDto,
+          metadata: updateAgreementDto as any,
         },
       });
 

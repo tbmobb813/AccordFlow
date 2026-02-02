@@ -67,7 +67,7 @@ export class ProposalsService {
           entityType: 'PROPOSAL',
           entityId: proposal.id,
           action: 'UPDATED',
-          metadata: updateProposalDto,
+          metadata: updateProposalDto as any,
         },
       });
 
