@@ -91,10 +91,7 @@ function WorkflowCard({
   icon: string;
 }) {
   return (
-    <Link
-      href={href}
-      className="block rounded-lg bg-white p-6 shadow transition hover:shadow-lg"
-    >
+    <Link href={href} className="block rounded-lg bg-white p-6 shadow transition hover:shadow-lg">
       <div className="mb-4 text-4xl">{icon}</div>
       <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
       <p className="mt-2 text-sm text-gray-600">{description}</p>

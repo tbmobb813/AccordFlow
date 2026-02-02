@@ -10,11 +10,7 @@ export const metadata: Metadata = {
   description: 'Client lifecycle management from contact to payment',
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <body className={inter.className}>

@@ -16,7 +16,7 @@ export const api = axios.create({
 api.interceptors.request.use((config) => {
   const tenantSlug = localStorage.getItem('tenant-slug') || 'demo-company';
   config.headers['x-tenant-slug'] = tenantSlug;
-  
+
   // Token should be set per-request using setAuthToken helper
   return config;
 });
