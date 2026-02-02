@@ -166,10 +166,7 @@ CREATE TABLE inquiries (
     CHECK (status IN ('new', 'in_review', 'converted', 'rejected')),
   converted_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  CHECK (
-    (status = 'converted' AND converted_at IS NOT NULL) OR
-    (status != 'converted' AND converted_at IS NULL)
-  )
+  CHECK ((status = 'converted') = (converted_at IS NOT NULL))
 );
 
 CREATE INDEX idx_inquiries_tenant_status 
@@ -208,12 +205,7 @@ CREATE TABLE opportunities (
   closed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
-  CHECK (
-    (status IN ('won', 'lost') AND closed_at IS NOT NULL) OR
-    (status = 'open' AND closed_at IS NULL)
-  ),
-  FOREIGN KEY (pipeline_id, stage_id) 
-    REFERENCES stages(pipeline_id, id)
+  CHECK ((status IN ('won', 'lost')) = (closed_at IS NOT NULL))
 );
 
 CREATE INDEX idx_opportunities_tenant_status 
@@ -232,10 +224,7 @@ CREATE TABLE meetings (
   completed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   CHECK (scheduled_end > scheduled_start),
-  CHECK (
-    (status = 'completed' AND completed_at IS NOT NULL) OR
-    (status != 'completed' AND completed_at IS NULL)
-  )
+  CHECK ((status = 'completed') = (completed_at IS NOT NULL))
 );
 
 CREATE TABLE proposals (
@@ -252,10 +241,7 @@ CREATE TABLE proposals (
   responded_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
-  CHECK (
-    (status != 'draft' AND sent_at IS NOT NULL) OR
-    (status = 'draft' AND sent_at IS NULL)
-  )
+  CHECK ((status = 'draft') = (sent_at IS NULL))
 );
 
 CREATE TABLE agreements (
@@ -271,10 +257,7 @@ CREATE TABLE agreements (
   signer_email VARCHAR(255),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
-  CHECK (
-    (signature_status != 'draft' AND sent_at IS NOT NULL) OR
-    (signature_status = 'draft' AND sent_at IS NULL)
-  )
+  CHECK ((signature_status = 'draft') = (sent_at IS NULL))
 );
 
 CREATE TABLE invoices (
@@ -468,30 +451,56 @@ async function sendProposal(
 
 ### Rule 1: Proposal → Agreement Requirement
 ```sql
--- Constraint: Agreement requires accepted proposal
-ALTER TABLE agreements
-  ADD CONSTRAINT chk_proposal_accepted
-  CHECK (
-    NOT EXISTS (
-      SELECT 1 FROM proposals 
-      WHERE proposals.id = agreements.proposal_id 
-      AND proposals.status != 'accepted'
-    )
-  );
+-- Trigger-based validation: Agreement requires accepted proposal
+CREATE OR REPLACE FUNCTION validate_agreement_proposal_accepted()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM proposals
+    WHERE proposals.id = NEW.proposal_id
+      AND proposals.status = 'accepted'
+  ) THEN
+    RAISE EXCEPTION 'Agreement % requires an accepted proposal (proposal_id=%)', NEW.id, NEW.proposal_id
+      USING ERRCODE = '23514'; -- check_violation
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_validate_agreement_proposal_accepted
+BEFORE INSERT OR UPDATE ON agreements
+FOR EACH ROW
+EXECUTE FUNCTION validate_agreement_proposal_accepted();
 ```
 
 ### Rule 2: Agreement → Invoice Requirement
 ```sql
--- Constraint: Invoice requires signed agreement
-ALTER TABLE invoices
-  ADD CONSTRAINT chk_agreement_signed
-  CHECK (
-    NOT EXISTS (
-      SELECT 1 FROM agreements 
-      WHERE agreements.id = invoices.agreement_id 
-      AND agreements.signature_status != 'signed'
-    )
-  );
+-- Trigger-based validation: Invoice requires signed agreement
+CREATE OR REPLACE FUNCTION validate_invoice_agreement_signed()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.agreement_id IS NOT NULL THEN
+    IF NOT EXISTS (
+      SELECT 1
+      FROM agreements
+      WHERE agreements.id = NEW.agreement_id
+        AND agreements.signature_status = 'signed'
+    ) THEN
+      RAISE EXCEPTION 'Invoice % requires a signed agreement (agreement_id=%)', NEW.id, NEW.agreement_id
+        USING ERRCODE = '23514'; -- check_violation
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_validate_invoice_agreement_signed
+BEFORE INSERT OR UPDATE ON invoices
+FOR EACH ROW
+EXECUTE FUNCTION validate_invoice_agreement_signed();
 ```
 
 ### Rule 3: Invoice Payment Reconciliation
@@ -503,15 +512,15 @@ BEGIN
   IF NEW.status = 'succeeded' THEN
     UPDATE invoices
     SET 
-      amount_paid = amount_paid + NEW.amount,
+      amount_paid = invoices.amount_paid + NEW.amount,
       status = CASE
-        WHEN amount_paid + NEW.amount >= total_amount THEN 'paid'
-        WHEN amount_paid + NEW.amount > 0 THEN 'partially_paid'
-        ELSE status
+        WHEN invoices.amount_paid + NEW.amount >= invoices.total_amount THEN 'paid'
+        WHEN invoices.amount_paid + NEW.amount > 0 THEN 'partially_paid'
+        ELSE invoices.status
       END,
       paid_at = CASE
-        WHEN amount_paid + NEW.amount >= total_amount THEN NOW()
-        ELSE paid_at
+        WHEN invoices.amount_paid + NEW.amount >= invoices.total_amount THEN NOW()
+        ELSE invoices.paid_at
       END,
       updated_at = NOW()
     WHERE id = NEW.invoice_id;
