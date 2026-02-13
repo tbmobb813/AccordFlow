@@ -1,7 +1,7 @@
-import { IsString, IsOptional, IsEnum, IsNumber, IsDateString } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsDateString } from 'class-validator';
 import { ApiProperty, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { OpportunityStage } from '@prisma/client';
+import { OpportunityStatus } from '@prisma/client';
 
 export class CreateOpportunityDto {
   @ApiProperty()
@@ -10,7 +10,15 @@ export class CreateOpportunityDto {
 
   @ApiProperty()
   @IsString()
-  title: string;
+  name: string;
+
+  @ApiProperty()
+  @IsString()
+  pipelineId: string;
+
+  @ApiProperty()
+  @IsString()
+  stageId: string;
 
   @ApiProperty({ required: false })
   @IsOptional()
@@ -23,10 +31,10 @@ export class CreateOpportunityDto {
   @IsNumber()
   value?: number;
 
-  @ApiProperty({ required: false, enum: OpportunityStage })
+  @ApiProperty({ required: false, enum: OpportunityStatus })
   @IsOptional()
-  @IsEnum(OpportunityStage)
-  stage?: OpportunityStage;
+  @IsEnum(OpportunityStatus)
+  status?: OpportunityStatus;
 
   @ApiProperty({ required: false })
   @IsOptional()

@@ -1,11 +1,15 @@
 import { IsString, IsOptional, IsEnum, IsDateString } from 'class-validator';
 import { ApiProperty, PartialType } from '@nestjs/swagger';
-import { AgreementStatus } from '@prisma/client';
+import { AgreementSignatureStatus } from '@prisma/client';
 
 export class CreateAgreementDto {
   @ApiProperty()
   @IsString()
   proposalId: string;
+
+  @ApiProperty()
+  @IsString()
+  opportunityId: string;
 
   @ApiProperty()
   @IsString()
@@ -16,10 +20,10 @@ export class CreateAgreementDto {
   @IsString()
   content?: string;
 
-  @ApiProperty({ required: false, enum: AgreementStatus })
+  @ApiProperty({ required: false, enum: AgreementSignatureStatus })
   @IsOptional()
-  @IsEnum(AgreementStatus)
-  status?: AgreementStatus;
+  @IsEnum(AgreementSignatureStatus)
+  signatureStatus?: AgreementSignatureStatus;
 
   @ApiProperty({ required: false })
   @IsOptional()

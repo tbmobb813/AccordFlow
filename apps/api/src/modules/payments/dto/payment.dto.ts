@@ -1,7 +1,7 @@
 import { IsString, IsOptional, IsEnum, IsNumber } from 'class-validator';
 import { ApiProperty, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { PaymentStatus } from '@prisma/client';
+import { PaymentStatus, PaymentProvider } from '@prisma/client';
 
 export class CreatePaymentDto {
   @ApiProperty()
@@ -9,9 +9,18 @@ export class CreatePaymentDto {
   invoiceId: string;
 
   @ApiProperty()
+  @IsString()
+  opportunityId: string;
+
+  @ApiProperty()
   @Type(() => Number)
   @IsNumber()
   amount: number;
+
+  @ApiProperty({ required: false, enum: PaymentProvider })
+  @IsOptional()
+  @IsEnum(PaymentProvider)
+  provider?: PaymentProvider;
 
   @ApiProperty({ required: false, enum: PaymentStatus })
   @IsOptional()
@@ -21,12 +30,12 @@ export class CreatePaymentDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
-  method?: string;
+  providerPaymentId?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
-  transactionId?: string;
+  currency?: string;
 }
 
 export class UpdatePaymentDto extends PartialType(CreatePaymentDto) {}

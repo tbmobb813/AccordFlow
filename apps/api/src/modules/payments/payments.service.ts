@@ -10,8 +10,14 @@ export class PaymentsService {
     return this.prisma.$transaction(async (tx) => {
       const payment = await tx.payment.create({
         data: {
-          ...createPaymentDto,
           tenantId,
+          invoiceId: createPaymentDto.invoiceId,
+          opportunityId: createPaymentDto.opportunityId,
+          provider: createPaymentDto.provider ?? 'MANUAL',
+          providerPaymentId: createPaymentDto.providerPaymentId,
+          amount: createPaymentDto.amount,
+          currency: createPaymentDto.currency ?? 'USD',
+          status: createPaymentDto.status,
         },
       });
 

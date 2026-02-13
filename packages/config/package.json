@@ -1,0 +1,8 @@
+{
+  "name": "@accordflow/config",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.js",
+  "files": ["eslint", "typescript"],
+  "description": "Shared config package for ESLint and TypeScript settings used across the monorepo."
+}
