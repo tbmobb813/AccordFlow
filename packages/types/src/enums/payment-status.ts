@@ -1,6 +1,5 @@
 export type PaymentStatus =
   | 'PENDING'
-  | 'PROCESSING'
-  | 'COMPLETED'
+  | 'SUCCEEDED'
   | 'FAILED'
   | 'REFUNDED';

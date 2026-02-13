@@ -1,8 +1,18 @@
+export type EntityType =
+  | 'CONTACT'
+  | 'INQUIRY'
+  | 'OPPORTUNITY'
+  | 'MEETING'
+  | 'PROPOSAL'
+  | 'AGREEMENT'
+  | 'INVOICE'
+  | 'PAYMENT';
+
 export interface Activity {
   id: string;
   tenantId: string;
   userId?: string | null;
-  entityType: string;
+  entityType: EntityType;
   entityId: string;
   action: string;
   metadata?: Record<string, any> | null;

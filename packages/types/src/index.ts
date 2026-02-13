@@ -7,10 +7,6 @@ export * from './api/invoices';
 export * from './api/payments';
 export * from './api/activities';
 
-export * from './enums/opportunity-state';
-export * from './enums/proposal-status';
-export * from './enums/agreement-status';
-export * from './enums/payment-status';
 export type UserId = string;
 
 export interface UserProfile {

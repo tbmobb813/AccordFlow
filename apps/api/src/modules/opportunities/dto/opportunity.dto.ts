@@ -1,6 +1,7 @@
 import { IsString, IsOptional, IsNumber, IsDateString } from 'class-validator';
 import { ApiProperty, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { OpportunityStatus } from '@prisma/client';
 
 export class CreateOpportunityDto {
   @ApiProperty()
@@ -29,6 +30,11 @@ export class CreateOpportunityDto {
   @Type(() => Number)
   @IsNumber()
   value?: number;
+
+  @ApiProperty({ required: false, enum: OpportunityStatus })
+  @IsOptional()
+  @IsEnum(OpportunityStatus)
+  status?: OpportunityStatus;
 
   @ApiProperty({ required: false })
   @IsOptional()
